@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  transcription-app:
+    build: .
+    container_name: dashboard_transcricao
+    ports:
+      - "5000:5000"
+    volumes:
+      # Mapeia a pasta de uploads para que os ficheiros não se percam ao reiniciar
+      - ./uploads:/app/uploads
+      
+      # --- CORREÇÃO PARA WINDOWS ---
+      # Mapeia a pasta de configuração do gcloud do seu Windows (que fica em %APPDATA%/gcloud)
+      # para a localização que o container espera.
+      - ${APPDATA}/gcloud:/root/.config/gcloud
+      
+    restart: unless-stopped
+

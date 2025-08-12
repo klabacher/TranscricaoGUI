@@ -1,0 +1,21 @@
+# Ficheiros e pastas a serem ignorados pelo gcloud deploy.
+
+# Ambiente Virtual do Python (O MAIS IMPORTANTE)
+.venv/
+venv/
+env/
+
+# Ficheiros de cache do Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Ficheiros de upload temporários que não precisam de ser publicados
+uploads/
+
+# Ficheiros de configuração do VSCode
+.vscode/
+
+# Ficheiro de banco de dados local (se existir)
+*.db
+*.sqlite3

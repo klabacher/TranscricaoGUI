@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  transcription-app:
+    # O comando abaixo substitui o CMD do Dockerfile apenas em ambiente de desenvolvimento.
+    # A flag --reload faz com que o servidor reinicie automaticamente quando você salva
+    # uma alteração em um ficheiro .py.
+    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "8", "--timeout", "0", "--reload", "app:app"]
+    
+    volumes:
+      # A linha abaixo "espelha" a sua pasta local para dentro do container.
+      # Qualquer alteração no seu código (app.py, etc.) é refletida instantaneamente.
+      - .:/app

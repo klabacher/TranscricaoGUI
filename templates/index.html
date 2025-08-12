@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="pt-br"> <!-- O JS adicionará a classe 'dark' aqui -->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Análise IA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = { darkMode: 'class' }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .nav-button.active { @apply bg-blue-600 text-white; }
+        .page-content { display: none; }
+        .page-content.active { display: block; }
+        /* Estilos base (light mode) */
+        .card { @apply bg-white border border-gray-200 rounded-xl p-6 shadow-lg; }
+        /* Estilos para dark mode */
+        .dark .card { @apply bg-gray-800 border-gray-700; }
+        .chart-container { position: relative; height: 300px; width: 100%; }
+        .filter-select { -webkit-appearance: none; -moz-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-position: right 0.5rem center; background-repeat: no-repeat; background-size: 1.5em 1.5em; padding-right: 2.5rem; }
+        .modal-overlay { transition: opacity 0.3s ease; }
+        .batch-row { cursor: pointer; }
+        .files-row { display: none; }
+        .analysis-row { cursor: pointer; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-300">
+    <main class="max-w-7xl mx-auto space-y-8 p-4 md:p-8">
+        <header class="flex flex-col md:flex-row items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Plataforma de Análise IA</h1>
+                <p class="text-gray-600 dark:text-gray-400 mt-1">Insights acionáveis a partir das suas transcrições.</p>
+            </div>
+            <div class="flex items-center gap-4 mt-4 md:mt-0">
+                <nav class="flex p-1 bg-gray-200 dark:bg-gray-700 rounded-lg">
+                    <button data-page="dashboard" class="nav-button active text-gray-700 dark:text-gray-300 py-2 px-4 rounded-md text-sm font-medium">Dashboard</button>
+                    <button data-page="batches" class="nav-button text-gray-700 dark:text-gray-300 py-2 px-4 rounded-md text-sm font-medium">Lotes</button>
+                </nav>
+                <button id="theme-toggle" class="p-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                    <svg id="theme-toggle-light-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 14.95a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414l-.707.707zm-2.12-10.607a1 1 0 011.414 0l.707.707a1 1 0 11-1.414 1.414l-.707-.707a1 1 0 010-1.414zM4 11a1 1 0 100-2H3a1 1 0 100 2h1z" fill-rule="evenodd" clip-rule="evenodd"></path></svg>
+                    <svg id="theme-toggle-dark-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Conteúdo do Dashboard -->
+        <div id="page-dashboard" class="page-content active space-y-8">
+            <section class="card flex flex-wrap items-center gap-4 justify-between">
+                <div class="flex flex-wrap items-center gap-4">
+                    <h3 class="text-md font-semibold text-gray-700 dark:text-gray-300 mr-4">Filtros:</h3>
+                    <div>
+                        <label for="batch-filter" class="text-sm font-medium text-gray-500 dark:text-gray-400">Lote</label>
+                        <select id="batch-filter" class="filter-select mt-1 block w-full pl-3 pr-10 py-2 text-base bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md text-gray-900 dark:text-gray-100">
+                            <option value="all">Todos os Lotes</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <button id="export-excel-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM5.5 9.5a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v5a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-5zM10 5.5a.5.5 0 01.5.5v9a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-9a.5.5 0 01.5-.5h2zM14.5 9.5a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v5a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-5z" />
+                        </svg>
+                        Exportar para Excel
+                    </button>
+                </div>
+            </section>
+            <section id="kpis" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"></section>
+            <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="card">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Distribuição de Sentimentos</h2>
+                    <div class="chart-container"><canvas id="sentimentChart"></canvas></div>
+                </div>
+                <div class="card">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Principais Tópicos Mencionados</h2>
+                    <div class="chart-container"><canvas id="topicsChart"></canvas></div>
+                </div>
+            </section>
+            <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="card lg:col-span-2">
+                     <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Insights Acionáveis (Análise com IA)</h2>
+                     <p class="text-gray-600 dark:text-gray-400 mt-2 mb-4">Faça uma pergunta para obter um insight gerado pela IA com base nos dados filtrados.</p>
+                    <form id="interactive-form">
+                        <textarea id="interactive-prompt" class="w-full p-3 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 rounded-lg text-gray-900 dark:text-gray-200" rows="3" placeholder="Ex: Quais são as principais queixas sobre finanças?"></textarea>
+                        <button type="submit" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">Perguntar à IA</button>
+                    </form>
+                    <div id="interactive-result-container" class="mt-6 p-4 bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 hidden">
+                        <h3 class="font-semibold text-lg mb-2 text-gray-900 dark:text-white">Resposta da IA:</h3>
+                        <div id="interactive-result" class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap"></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Níveis de Engajamento</h2>
+                    <div class="chart-container"><canvas id="engagementChart"></canvas></div>
+                </div>
+            </section>
+             <section class="card">
+                <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Detalhes das Análises (Clique para analisar)</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="border-b border-gray-200 dark:border-gray-600">
+                            <tr>
+                                <th class="p-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Lote</th>
+                                <th class="p-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Sentimento</th>
+                                <th class="p-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tópico Principal</th>
+                                <th class="p-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Engajamento</th>
+                                <th class="p-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Resumo do Insight</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataTable" class="divide-y divide-gray-200 dark:divide-gray-700"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <!-- Conteúdo dos Lotes -->
+        <div id="page-batches" class="page-content space-y-8"></div>
+
+    </main>
+    
+    <!-- Template para a página de Lotes -->
+    <template id="batch-page-template">
+        <div class="space-y-8">
+            <div class="card">
+                <h2 class="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Novo Lote de Ficheiros</h2>
+                <form id="upload-form">
+                    <div class="mb-4">
+                        <label for="batch-name-input" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Nome do Lote (Opcional)</label>
+                        <input type="text" id="batch-name-input" placeholder="Ex: Campanha de Marketing - Julho" class="block w-full text-sm text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-2.5">
+                    </div>
+                    <div>
+                        <label for="file-upload-input" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Selecione ficheiros de áudio ou texto:</label>
+                        <!-- ATUALIZAÇÃO: Removido 'webkitdirectory' para permitir seleção de ficheiros individuais -->
+                        <input type="file" id="file-upload-input" name="files[]" class="block w-full text-sm border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400" multiple accept=".wav,.mp3,.flac,.ogg,.txt">
+                        <p id="file-count-info" class="mt-1 text-sm text-gray-500 dark:text-gray-400"></p>
+                    </div>
+                    <button type="submit" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">Enviar para Análise</button>
+                </form>
+                <div id="upload-status" class="mt-4 text-center"></div>
+            </div>
+            <div class="card">
+                <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Histórico de Lotes (Clique para expandir)</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-700/50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Nome do Lote</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Data de Criação</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Ficheiros</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="batches-table" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="bg-red-100 dark:bg-red-900/50 p-6 rounded-xl border border-red-300 dark:border-red-700">
+                <h2 class="text-xl font-semibold text-red-800 dark:text-red-300">Zona de Perigo</h2>
+                <p class="text-red-600 dark:text-red-400 mt-2">As ações abaixo são irreversíveis. Tenha certeza do que está a fazer.</p>
+                <div class="mt-4">
+                    <button id="clear-all-data-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Limpar Todos os Dados</button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Modal de Análise Individual -->
+    <div id="transcription-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col border border-gray-200 dark:border-gray-700">
+            <!-- Header do Modal -->
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center flex-shrink-0">
+                <h3 id="modal-title" class="text-xl font-semibold text-gray-900 dark:text-white">Análise Individual</h3>
+                <button id="modal-close-btn" class="text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-200 text-3xl leading-none">&times;</button>
+            </div>
+            
+            <!-- Conteúdo do Modal -->
+            <div class="p-6 overflow-y-auto space-y-6">
+                <!-- Texto da Transcrição -->
+                <div>
+                    <h4 class="font-semibold text-lg mb-2 text-gray-800 dark:text-gray-200">Conteúdo Analisado</h4>
+                    <div id="modal-content" class="p-4 bg-gray-100 dark:bg-gray-900/50 rounded-lg text-gray-700 dark:text-gray-300 leading-relaxed max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-700">
+                        <p>A carregar...</p>
+                    </div>
+                </div>
+
+                <!-- Análise Interativa -->
+                <div id="modal-interactive-analysis">
+                    <h4 class="font-semibold text-lg mb-2 text-gray-800 dark:text-gray-200">Pergunte à IA sobre este Conteúdo</h4>
+                    <form id="modal-interactive-form">
+                        <textarea id="modal-interactive-prompt" class="w-full p-3 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 rounded-lg text-gray-900 dark:text-gray-200" rows="2" placeholder="Ex: Quais foram os principais pontos de dor mencionados?"></textarea>
+                        <button type="submit" class="mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Analisar</button>
+                    </form>
+                    <div id="modal-interactive-result-container" class="mt-4 p-4 bg-gray-100 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700 hidden">
+                        <h5 class="font-semibold text-md mb-2 text-gray-800 dark:text-gray-200">Resposta da IA:</h5>
+                        <div id="modal-interactive-result" class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const API_BASE_URL = 'http://127.0.0.1:5000';
+        let activeCharts = {};
+        let activeTimers = {};
+
+        // --- Lógica do Tema Escuro/Claro ---
+        const themeToggleBtn = document.getElementById('theme-toggle');
+        const lightIcon = document.getElementById('theme-toggle-light-icon');
+        const darkIcon = document.getElementById('theme-toggle-dark-icon');
+
+        const applyTheme = (isDark) => {
+            document.documentElement.classList.toggle('dark', isDark);
+            if(lightIcon) lightIcon.classList.toggle('hidden', isDark);
+            if(darkIcon) darkIcon.classList.toggle('hidden', !isDark);
+        };
+        
+        const initializeTheme = () => {
+            const isDark = localStorage.getItem('color-theme') === 'dark' || (!('color-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            applyTheme(isDark);
+        }
+
+        themeToggleBtn.addEventListener('click', function() {
+            const isDark = !document.documentElement.classList.contains('dark');
+            localStorage.setItem('color-theme', isDark ? 'dark' : 'light');
+            applyTheme(isDark);
+            if (document.getElementById('page-dashboard').classList.contains('active')) {
+                applyFilters(document.getElementById('batch-filter').value);
+            }
+        });
+
+        // --- Lógica de Navegação Principal ---
+        const navButtons = document.querySelectorAll('.nav-button');
+        const pageContents = document.querySelectorAll('.page-content');
+        navButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const pageId = button.dataset.page;
+                navButtons.forEach(btn => btn.classList.remove('active'));
+                pageContents.forEach(content => content.classList.remove('active'));
+                button.classList.add('active');
+                const page = document.getElementById(`page-${pageId}`);
+                if(page) page.classList.add('active');
+                
+                if (pageId === 'dashboard') fetchAndRenderDashboard();
+                if (pageId === 'batches') {
+                    const batchPage = document.getElementById('page-batches');
+                    if(!batchPage.innerHTML.trim()) {
+                        batchPage.innerHTML = document.getElementById('batch-page-template').innerHTML;
+                        initializeBatchPageListeners();
+                    }
+                    loadBatchesData();
+                }
+            });
+        });
+        
+        // --- Lógica do Dashboard ---
+        const batchFilter = document.getElementById('batch-filter');
+
+        async function fetchAndRenderDashboard() {
+            try {
+                const batchResponse = await fetch(`${API_BASE_URL}/api/batches`);
+                const allBatches = await batchResponse.json();
+                populateBatchFilter(allBatches);
+                await applyFilters(batchFilter.value);
+            } catch (error) { console.error("Erro ao carregar dados do dashboard:", error); }
+        }
+        
+        function populateBatchFilter(batches) {
+            if (!batchFilter) return;
+            const currentVal = batchFilter.value;
+            batchFilter.innerHTML = '<option value="all">Todos os Lotes</option>';
+            batches.forEach(b => batchFilter.innerHTML += `<option value="${b.id}">${b.name} (ID: ${b.id})</option>`);
+            batchFilter.value = currentVal;
+        }
+        
+        async function applyFilters(batchId = 'all') {
+            try {
+                const dataUrl = new URL(`${API_BASE_URL}/api/dashboard_data`);
+                if (batchId !== 'all') {
+                    dataUrl.searchParams.append('batch_id', batchId);
+                }
+                const dataResponse = await fetch(dataUrl);
+                const filteredData = await dataResponse.json();
+                renderDashboard(filteredData);
+            } catch (error) { console.error("Erro ao aplicar filtros:", error); }
+        }
+
+        if(batchFilter) batchFilter.addEventListener('change', (e) => applyFilters(e.target.value));
+
+        function renderDashboard(data) {
+            destroyCharts();
+            renderKPIs(data);
+            renderSentimentDonut(data);
+            renderTopicsBar(data);
+            renderEngagementPolar(data);
+            renderDetailsTable(data);
+            initializeExportButton();
+        }
+
+        function destroyCharts() {
+            Object.values(activeCharts).forEach(chart => {
+                if (chart) chart.destroy();
+            });
+            activeCharts = {};
+        }
+
+        function getChartColors() {
+            const isDark = document.documentElement.classList.contains('dark');
+            return {
+                textColor: isDark ? '#d1d5db' : '#374151',
+                gridColor: isDark ? '#374151' : '#e5e7eb',
+                sentiment: { 'Positivo': '#22c55e', 'Negativo': '#ef4444', 'Neutro': '#f59e0b' },
+                engagement: { 'Alto': '#3b82f6', 'Médio': '#8b5cf6', 'Baixo': '#6366f1' },
+                topics: isDark? 'rgba(59, 130, 246, 0.7)' : 'rgba(59, 130, 246, 0.8)',
+                donutBorder: isDark ? '#1f2937' : '#ffffff'
+            };
+        }
+
+        function renderKPIs(data) {
+            const kpiContainer = document.getElementById('kpis');
+            if(!kpiContainer) return;
+            if (!data || data.length === 0) {
+                kpiContainer.innerHTML = `<p class="text-gray-500 dark:text-gray-400 col-span-full text-center">Nenhum dado encontrado para os filtros selecionados.</p>`;
+                return;
+            }
+            const totalAnalises = data.length;
+            const sentimentCounts = data.reduce((acc, item) => { acc[item.sentiment] = (acc[item.sentiment] || 0) + 1; return acc; }, {});
+            const predominantSentiment = Object.keys(sentimentCounts).length ? Object.keys(sentimentCounts).reduce((a, b) => sentimentCounts[a] > sentimentCounts[b] ? a : b) : 'N/A';
+            const problemTopics = data.filter(d => d.sentiment === 'Negativo').reduce((acc, item) => { acc[item.topic] = (acc[item.topic] || 0) + 1; return acc; }, {});
+            const topProblem = Object.keys(problemTopics).length ? Object.keys(problemTopics).reduce((a, b) => problemTopics[a] > problemTopics[b] ? a : b) : 'Nenhum';
+            const engagementCounts = data.reduce((acc, item) => { acc[item.engagement] = (acc[item.engagement] || 0) + 1; return acc; }, {});
+            const predominantEngagement = Object.keys(engagementCounts).length ? Object.keys(engagementCounts).reduce((a, b) => engagementCounts[a] > engagementCounts[b] ? a : b) : 'N/A';
+
+            kpiContainer.innerHTML = `
+                <div class="card text-center">
+                    <h3 class="text-gray-500 dark:text-gray-400 text-sm font-medium uppercase">Total de Análises</h3>
+                    <p class="text-4xl font-bold text-gray-900 dark:text-white mt-2">${totalAnalises}</p>
+                </div>
+                <div class="card text-center">
+                    <h3 class="text-gray-500 dark:text-gray-400 text-sm font-medium uppercase">Sentimento Predominante</h3>
+                    <p class="text-4xl font-bold text-amber-500 dark:text-amber-400 mt-2">${predominantSentiment}</p>
+                </div>
+                <div class="card text-center">
+                    <h3 class="text-gray-500 dark:text-gray-400 text-sm font-medium uppercase">Principal Desafio</h3>
+                    <p class="text-4xl font-bold text-red-600 dark:text-red-500 mt-2">${topProblem}</p>
+                </div>
+                 <div class="card text-center">
+                    <h3 class="text-gray-500 dark:text-gray-400 text-sm font-medium uppercase">Engajamento Médio</h3>
+                    <p class="text-4xl font-bold text-blue-600 dark:text-blue-500 mt-2">${predominantEngagement}</p>
+                </div>`;
+        }
+        
+        function renderSentimentDonut(data) {
+            const ctx = document.getElementById('sentimentChart')?.getContext('2d');
+            if(!ctx) return;
+            const colors = getChartColors();
+            const sentimentCounts = data.reduce((acc, item) => { acc[item.sentiment] = (acc[item.sentiment] || 0) + 1; return acc; }, {});
+            
+            activeCharts.sentiment = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(sentimentCounts),
+                    datasets: [{
+                        data: Object.values(sentimentCounts),
+                        backgroundColor: Object.keys(sentimentCounts).map(key => colors.sentiment[key] || '#9ca3af'),
+                        borderColor: colors.donutBorder, borderWidth: 4,
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { color: colors.textColor } } }
+                }
+            });
+        }
+
+        function renderTopicsBar(data) {
+            const ctx = document.getElementById('topicsChart')?.getContext('2d');
+            if(!ctx) return;
+            const colors = getChartColors();
+            const topicCounts = data.reduce((acc, item) => { acc[item.topic] = (acc[item.topic] || 0) + 1; return acc; }, {});
+
+            activeCharts.topics = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(topicCounts),
+                    datasets: [{
+                        label: 'Nº de Menções', data: Object.values(topicCounts),
+                        backgroundColor: colors.topics,
+                    }]
+                },
+                options: {
+                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { ticks: { color: colors.textColor }, grid: { color: colors.gridColor } },
+                        y: { ticks: { color: colors.textColor }, grid: { display: false } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function renderEngagementPolar(data) {
+            const ctx = document.getElementById('engagementChart')?.getContext('2d');
+            if(!ctx) return;
+            const colors = getChartColors();
+            const engagementCounts = data.reduce((acc, item) => { acc[item.engagement] = (acc[item.engagement] || 0) + 1; return acc; }, {});
+
+            activeCharts.engagement = new Chart(ctx, {
+                type: 'polarArea',
+                data: {
+                    labels: Object.keys(engagementCounts),
+                    datasets: [{
+                        data: Object.values(engagementCounts),
+                        backgroundColor: Object.keys(engagementCounts).map(key => colors.engagement[key] || '#9ca3af'),
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { r: { ticks: { display: false }, grid: { color: colors.gridColor } } },
+                    plugins: { legend: { position: 'bottom', labels: { color: colors.textColor } } }
+                }
+            });
+        }
+        
+        function renderDetailsTable(data) {
+            const tableBody = document.getElementById('dataTable');
+            if (!tableBody) return;
+            tableBody.innerHTML = '';
+            if (!data || data.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-gray-500">Nenhum dado para exibir.</td></tr>`;
+                return;
+            }
+
+            const sentimentColors = { 'Positivo': 'text-green-600 dark:text-green-400', 'Negativo': 'text-red-600 dark:text-red-400', 'Neutro': 'text-amber-600 dark:text-amber-400' };
+            const engagementColors = { 'Alto': 'text-blue-600 dark:text-blue-400', 'Médio': 'text-purple-600 dark:text-purple-400', 'Baixo': 'text-indigo-600 dark:text-indigo-400' };
+
+            data.forEach(item => {
+                const row = document.createElement('tr');
+                row.className = 'analysis-row hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors';
+                row.dataset.id = item.id;
+                row.innerHTML = `
+                    <td class="p-3 text-sm text-gray-700 dark:text-gray-300">${item.batch_name}</td>
+                    <td class="p-3 font-medium ${sentimentColors[item.sentiment] || ''}">${item.sentiment}</td>
+                    <td class="p-3 text-gray-700 dark:text-gray-300">${item.topic}</td>
+                    <td class="p-3 font-medium ${engagementColors[item.engagement] || ''}">${item.engagement}</td>
+                    <td class="p-3 text-gray-500 dark:text-gray-400 text-sm">${item.summary}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+            tableBody.querySelectorAll('.analysis-row').forEach(row => {
+                row.addEventListener('click', () => openAnalysisModal(row.dataset.id));
+            });
+        }
+
+        // --- Lógica da Análise Interativa (Dashboard) ---
+        const interactiveForm = document.getElementById('interactive-form');
+        if(interactiveForm) {
+            interactiveForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const promptInput = document.getElementById('interactive-prompt');
+                const resultContainer = document.getElementById('interactive-result-container');
+                const resultDiv = document.getElementById('interactive-result');
+                const button = interactiveForm.querySelector('button');
+                const prompt = promptInput.value;
+                if (!prompt.trim()) return;
+
+                button.disabled = true; button.textContent = "A analisar...";
+                resultContainer.classList.remove('hidden');
+                resultDiv.textContent = "A IA está a pensar...";
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/interactive_analysis`, {
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ prompt: prompt, batch_id: document.getElementById('batch-filter').value })
+                    });
+                    const result = await response.json();
+                    if(response.ok) { resultDiv.textContent = result.answer; } 
+                    else { throw new Error(result.error || "Erro desconhecido"); }
+                } catch (error) {
+                    resultDiv.textContent = `Erro: ${error.message}`;
+                } finally {
+                    button.disabled = false; button.textContent = "Perguntar à IA";
+                }
+            });
+        }
+        
+        // --- Lógica do Botão de Exportação ---
+        function initializeExportButton() {
+            const exportExcelBtn = document.getElementById('export-excel-btn');
+            if (exportExcelBtn) {
+                exportExcelBtn.addEventListener('click', () => {
+                    const batchId = document.getElementById('batch-filter').value;
+                    const exportUrl = new URL(`${API_BASE_URL}/api/export_insights`);
+                    if (batchId !== 'all') {
+                        exportUrl.searchParams.append('batch_id', batchId);
+                    }
+                    window.location.href = exportUrl.href;
+                });
+            }
+        }
+
+        // --- Lógica da Página de Lotes ---
+        function initializeBatchPageListeners() {
+            const uploadForm = document.getElementById('upload-form');
+            const fileUploadInput = document.getElementById('file-upload-input');
+            const fileCountInfo = document.getElementById('file-count-info');
+            const ALLOWED_EXTENSIONS = ['.wav', '.mp3', '.flac', '.ogg', '.txt'];
+
+            if (fileUploadInput) {
+                fileUploadInput.addEventListener('change', (event) => {
+                    const files = event.target.files;
+                    if (files.length > 0) {
+                        const validFiles = Array.from(files).filter(file => {
+                            const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+                            return ALLOWED_EXTENSIONS.includes(extension);
+                        });
+                        fileCountInfo.textContent = `${validFiles.length} ficheiro(s) válidos selecionados de um total de ${files.length}.`;
+                    } else {
+                        fileCountInfo.textContent = '';
+                    }
+                });
+            }
+
+            if(uploadForm) {
+                uploadForm.addEventListener('submit', async (event) => {
+                    event.preventDefault();
+                    const batchNameInput = document.getElementById('batch-name-input');
+                    const uploadStatus = document.getElementById('upload-status');
+                    
+                    if (fileUploadInput.files.length === 0) {
+                        uploadStatus.innerHTML = `<p class="text-yellow-500">Por favor, selecione um ou mais ficheiros.</p>`;
+                        return;
+                    }
+
+                    const formData = new FormData();
+                    formData.append('batchName', batchNameInput.value);
+                    
+                    let validFileCount = 0;
+                    for (const file of fileUploadInput.files) {
+                        const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+                        if (ALLOWED_EXTENSIONS.includes(extension)) {
+                            formData.append('files[]', file);
+                            validFileCount++;
+                        }
+                    }
+
+                    if (validFileCount === 0) {
+                        uploadStatus.innerHTML = `<p class="text-yellow-500">Nenhum ficheiro válido (.wav, .mp3, .flac, .ogg, .txt) encontrado na seleção.</p>`;
+                        return;
+                    }
+                    
+                    uploadStatus.innerHTML = `<p class="text-blue-500">A enviar lote e ${validFileCount} ficheiro(s)...</p>`;
+                    try {
+                        const response = await fetch(`${API_BASE_URL}/api/upload`, { method: 'POST', body: formData });
+                        const result = await response.json();
+                        if (response.ok) {
+                            uploadStatus.innerHTML = `<p class="text-green-500">${result.message} O processamento continuará em segundo plano.</p>`;
+                            batchNameInput.value = '';
+                            fileUploadInput.value = '';
+                            fileCountInfo.textContent = '';
+                            setTimeout(loadBatchesData, 2000);
+                        } else { throw new Error(result.error); }
+                    } catch (error) {
+                        uploadStatus.innerHTML = `<p class="text-red-500">Erro: ${error.message}</p>`;
+                    }
+                });
+            }
+
+            const clearDataBtn = document.getElementById('clear-all-data-btn');
+            if(clearDataBtn) {
+                clearDataBtn.addEventListener('click', async () => {
+                    if (confirm("TEM A CERTEZA?\nEsta ação irá apagar TODOS os lotes, transcrições e análises.\n\nEsta ação é IRREVERSÍVEL.")) {
+                        try {
+                            const response = await fetch(`${API_BASE_URL}/api/clear_all_data`, { method: 'DELETE' });
+                            const result = await response.json();
+                            alert(result.message || result.error);
+                            loadBatchesData();
+                            fetchAndRenderDashboard();
+                        } catch (error) { alert(`Erro ao limpar os dados: ${error.message}`); }
+                    }
+                });
+            }
+        }
+
+        async function loadBatchesData() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/batches`);
+                const data = await response.json();
+                renderBatchesTable(data);
+            } catch (error) { console.error("Erro ao carregar lotes:", error); }
+        }
+
+        function renderBatchesTable(data) {
+            const tableBody = document.getElementById('batches-table');
+            if(!tableBody) return;
+            tableBody.innerHTML = '';
+            if (!data || data.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">Nenhum lote encontrado.</td></tr>`;
+                return;
+            }
+            data.forEach(item => {
+                // Ação de download do lote foi removida pois os ficheiros originais não são mais mantidos no servidor.
+                const row = `
+                    <tr class="batch-row hover:bg-gray-50 dark:hover:bg-gray-700/50" data-id="${item.id}">
+                        <td class="px-6 py-4 font-medium text-gray-900 dark:text-white">${item.name}</td>
+                        <td class="px-6 py-4 text-gray-500 dark:text-gray-400">${new Date(item.created_at).toLocaleString('pt-BR')}</td>
+                        <td class="px-6 py-4 text-center text-gray-500 dark:text-gray-400">${item.file_count}</td>
+                        <td class="px-6 py-4 text-center text-gray-400 text-xs">N/A</td>
+                    </tr>
+                    <tr class="files-row bg-gray-100 dark:bg-gray-900" id="files-for-batch-${item.id}">
+                        <td colspan="4" class="p-0"><div class="p-4"><div id="files-table-${item.id}">A carregar ficheiros...</div></div></td>
+                    </tr>
+                `;
+                tableBody.innerHTML += row;
+            });
+            document.querySelectorAll('.batch-row').forEach(el => el.addEventListener('click', toggleBatchFiles));
+        }
+
+        async function toggleBatchFiles(event) {
+            if (event.target.tagName === 'A') return;
+            const batchId = event.currentTarget.dataset.id;
+            const filesRow = document.getElementById(`files-for-batch-${batchId}`);
+            const isVisible = filesRow.style.display === 'table-row';
+            if (isVisible) {
+                filesRow.style.display = 'none';
+                clearInterval(activeTimers[batchId]);
+            } else {
+                filesRow.style.display = 'table-row';
+                await loadAndRenderBatchFiles(batchId);
+            }
+        }
+        
+        async function loadAndRenderBatchFiles(batchId) {
+            const container = document.getElementById(`files-table-${batchId}`);
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/batch/${batchId}/details`);
+                const files = await response.json();
+                renderFilesTable(batchId, files);
+                const isProcessing = files.some(f => !f.status.toLowerCase().includes('concluído') && !f.status.toLowerCase().includes('erro'));
+                if (isProcessing) {
+                    if (activeTimers[batchId]) clearInterval(activeTimers[batchId]);
+                    activeTimers[batchId] = setInterval(() => loadAndRenderBatchFiles(batchId), 5000);
+                } else {
+                    clearInterval(activeTimers[batchId]);
+                }
+            } catch (error) {
+                container.innerHTML = `<p class="text-red-500">Erro ao carregar ficheiros.</p>`;
+            }
+        }
+
+        function renderFilesTable(batchId, files) {
+            const container = document.getElementById(`files-table-${batchId}`);
+            if (!files || files.length === 0) {
+                container.innerHTML = `<p class="text-gray-500">Nenhum ficheiro neste lote.</p>`;
+                return;
+            }
+            let tableHTML = `<table class="min-w-full">`;
+            files.forEach(file => {
+                let statusColor = 'text-gray-500 dark:text-gray-400';
+                if (file.status === 'Concluído') statusColor = 'text-green-500 dark:text-green-400';
+                else if (file.status.toLowerCase().includes('erro')) statusColor = 'text-red-500 dark:text-red-400';
+                else if (!file.status.toLowerCase().includes('concluído')) statusColor = 'text-blue-500 dark:text-blue-400';
+                
+                let actions = '';
+                if (file.status === 'Concluído') {
+                    actions = `
+                        <a href="${API_BASE_URL}/api/download/transcription/${file.id}" class="text-indigo-500 hover:text-indigo-400 mr-4">Baixar TXT</a>
+                        <button class="view-transcription-btn text-green-500 hover:text-green-400" data-id="${file.id}">Ver Detalhes</button>
+                    `;
+                } else if (file.status.toLowerCase().includes('erro')) {
+                    actions = `<button class="view-transcription-btn text-red-500 hover:text-red-400" data-id="${file.id}">Ver Erro</button>`;
+                }
+
+                tableHTML += `<tr class="border-t border-gray-200 dark:border-gray-700"><td class="p-2">${file.filename}</td><td class="p-2 font-medium ${statusColor}">${file.status}</td><td class="p-2 text-right">${actions}</td></tr>`;
+            });
+            tableHTML += `</table>`;
+            container.innerHTML = tableHTML;
+            document.querySelectorAll('.view-transcription-btn').forEach(btn => btn.addEventListener('click', showFileDetailModal));
+        }
+
+        // --- Lógica do Modal ---
+        const modal = document.getElementById('transcription-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalContent = document.getElementById('modal-content');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+        const modalInteractiveForm = document.getElementById('modal-interactive-form');
+        const modalInteractiveResultContainer = document.getElementById('modal-interactive-result-container');
+        const modalInteractiveResult = document.getElementById('modal-interactive-result');
+        const modalInteractivePrompt = document.getElementById('modal-interactive-prompt');
+        const modalAnalysisSection = document.getElementById('modal-interactive-analysis');
+
+        async function openAnalysisModal(transcriptionId) {
+            if (!modal) return;
+            
+            modalTitle.textContent = "Análise Individual";
+            modalContent.innerHTML = '<p>A carregar conteúdo...</p>';
+            modalInteractiveResultContainer.classList.add('hidden');
+            modalInteractivePrompt.value = '';
+            modalInteractiveForm.dataset.id = transcriptionId;
+            modalAnalysisSection.style.display = 'block';
+
+            modal.classList.remove('hidden');
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/transcription/${transcriptionId}`);
+                const data = await response.json();
+                const formattedText = data.transcript_text
+                    ? data.transcript_text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>')
+                    : '<p>Conteúdo não disponível.</p>';
+                modalContent.innerHTML = formattedText;
+            } catch (error) {
+                modalContent.innerHTML = '<p class="text-red-500">Erro ao carregar o conteúdo.</p>';
+            }
+        }
+
+        async function showFileDetailModal(event) {
+            const transcriptionId = event.target.dataset.id;
+            const isError = event.target.textContent.toLowerCase().includes('erro');
+            
+            await openAnalysisModal(transcriptionId);
+            
+            if (isError) {
+                modalTitle.textContent = "Detalhe do Erro";
+                modalAnalysisSection.style.display = 'none';
+            }
+        }
+
+        function hideModal() {
+            if (modal) modal.classList.add('hidden');
+        }
+        
+        if (modalCloseBtn) modalCloseBtn.addEventListener('click', hideModal);
+        if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
+        
+        if (modalInteractiveForm) {
+            modalInteractiveForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const transcriptionId = e.currentTarget.dataset.id;
+                const prompt = modalInteractivePrompt.value;
+                const button = e.currentTarget.querySelector('button');
+
+                if (!prompt.trim() || !transcriptionId) return;
+
+                button.disabled = true;
+                button.textContent = 'A analisar...';
+                modalInteractiveResultContainer.classList.remove('hidden');
+                modalInteractiveResult.textContent = 'A IA está a pensar...';
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/analysis/${transcriptionId}/insight`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ prompt: prompt })
+                    });
+                    const result = await response.json();
+                    if (response.ok) {
+                        modalInteractiveResult.textContent = result.answer;
+                    } else {
+                        throw new Error(result.error || "Erro desconhecido");
+                    }
+                } catch (error) {
+                    modalInteractiveResult.textContent = `Erro: ${error.message}`;
+                } finally {
+                    button.disabled = false;
+                    button.textContent = 'Analisar';
+                }
+            });
+        }
+
+        // --- Carga Inicial ---
+        initializeTheme();
+        fetchAndRenderDashboard();
+    });
+    </script>
+</body>
+</html>
