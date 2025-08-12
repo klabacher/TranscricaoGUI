@@ -10,17 +10,15 @@ import io
 import pandas as pd
 import hashlib
 import librosa
+import requests # Adicionado para fazer chamadas à API
+import time # Adicionado para pausas durante o polling
 
 # --- Imports da Google Cloud e Vertex AI ---
 from google.cloud import speech
 from google.api_core import exceptions as google_exceptions
 from dotenv import load_dotenv
 import vertexai
-# CORREÇÃO: O nome da classe é GenerativeModel, não GeneQrativeModel
 from vertexai.generative_models import GenerativeModel, Part
-
-# --- IMPORTAÇÃO DO NOSSO NOVO MOTOR DE TRANSCRIÇÃO ---
-import transcription_engine
 
 # --- Configuração Inicial e Carregamento de Variáveis ---
 load_dotenv()
@@ -41,13 +39,90 @@ UPLOAD_FOLDER = 'uploads'
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-# CORREÇÃO: Aponta para a pasta 'templates' para o Flask encontrar o index.html
 app = Flask(__name__, template_folder='templates')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 CORS(app)
 
 db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database.db')
 engine = create_engine(f'sqlite:///{db_path}')
+
+# --- FUNÇÃO DE TRANSCRIÇÃO VIA API EXTERNA ---
+
+def transcribe_via_api(file_path, filename, model_id, entry_id):
+    """
+    Orquestra a transcrição usando a API externa.
+    Envia o job, monitora o status e baixa o resultado.
+    """
+    print(f"Redirecionando '{filename}' para a API de transcrição externa no modelo '{model_id}'...")
+    
+    # Etapa 1: Enviar o job para a API
+    try:
+        with open(file_path, 'rb') as f:
+            files = {'files': (filename, f, 'audio/ogg')} # Adapte o content-type se necessário
+            payload = {
+                'model_id': model_id,
+                'session_id': str(entry_id), # Usando o ID da entrada como ID de sessão
+                'language': 'pt'
+            }
+            response = requests.post(f"{public_url_api}/jobs", files=files, data=payload, timeout=30)
+            response.raise_for_status() # Lança um erro para códigos 4xx/5xx
+        
+        job_info = response.json().get('jobs_created', [])
+        if not job_info:
+            raise ValueError("A API não retornou um ID de job válido.")
+        job_id = job_info[0]['job_id']
+        print(f"Job criado na API com sucesso. ID: {job_id}")
+
+    except requests.exceptions.RequestException as e:
+        raise ConnectionError(f"Falha ao conectar ou enviar job para a API de transcrição: {e}")
+    except Exception as e:
+        raise ValueError(f"Erro ao processar resposta da criação de job da API: {e}")
+
+    # Etapa 2: Monitorar (poll) o status do job
+    while True:
+        try:
+            status_response = requests.get(f"{public_url_api}/jobs/{job_id}", timeout=10)
+            status_response.raise_for_status()
+            job_status = status_response.json()
+            
+            status = job_status.get('status')
+            progress = job_status.get('progress', 0)
+
+            # Atualiza o status no banco de dados local para o frontend ver
+            with engine.connect() as connection:
+                connection.execute(text("UPDATE transcriptions SET status = :status WHERE id = :id"), 
+                                   {"status": f"A transcrever (API): {progress}%", "id": entry_id})
+                connection.commit()
+
+            if status == 'completed':
+                print(f"Job {job_id} concluído na API.")
+                break
+            elif status in ['failed', 'cancelled']:
+                error_details = job_status.get('debug_log', ['Erro desconhecido na API.'])[-1]
+                raise RuntimeError(f"Job na API falhou ou foi cancelado. Detalhe: {error_details}")
+            
+            time.sleep(5) # Espera 5 segundos antes de verificar novamente
+
+        except requests.exceptions.RequestException as e:
+            raise ConnectionError(f"Falha ao verificar status do job na API: {e}")
+
+    # Etapa 3: Baixar o resultado
+    try:
+        # Usando 'transcription_dialogue_markdown' para um formato mais rico
+        download_response = requests.get(f"{public_url_api}/jobs/{job_id}/download", params={"text_type": "transcription_dialogue_markdown"}, timeout=30)
+        download_response.raise_for_status()
+        full_dialogue = download_response.text
+
+        # Para a análise do Gemini, usamos o texto simples
+        download_simple_response = requests.get(f"{public_url_api}/jobs/{job_id}/download", params={"text_type": "transcription_raw"}, timeout=30)
+        download_simple_response.raise_for_status()
+        analysis_input = download_simple_response.text
+
+        return full_dialogue, analysis_input
+
+    except requests.exceptions.RequestException as e:
+        raise ConnectionError(f"Falha ao baixar resultado da API: {e}")
+
 
 # --- FUNÇÕES DE PROCESSAMENTO DE IA (AGENTES) ---
 
@@ -124,6 +199,7 @@ def run_ai_analysis_pipeline(transcript_text):
       "action_items": []
     }}
     """
+
     try:
         response = model.generate_content(prompt)
         json_text = response.text.strip()
@@ -148,23 +224,15 @@ def process_file_pipeline(entry_id, file_path, filename, file_type, model_id):
         # --- ETAPA 1: TRANSCRIÇÃO OU LEITURA ---
         if file_type == 'audio':
             with engine.connect() as connection:
-                connection.execute(text("UPDATE transcriptions SET status = :status WHERE id = :id"), {"status": f"A transcrever com {model_id}...", "id": entry_id})
+                connection.execute(text("UPDATE transcriptions SET status = :status WHERE id = :id"), {"status": f"Aguardando na fila para o modelo '{model_id}'...", "id": entry_id})
                 connection.commit()
             
-            model_config = transcription_engine.AVAILABLE_MODELS.get(model_id)
-            if not model_config:
-                raise ValueError(f"Modelo de transcrição '{model_id}' não encontrado.")
-
-            # --- Roteamento para o motor de transcrição correto ---
-            if model_config['impl'] == 'google_chirp':
+            # --- Roteamento simplificado ---
+            if model_id == 'google_chirp':
                 full_dialogue, analysis_input = transcribe_with_google_chirp(file_path)
-            else: # Usa o motor local (Whisper, Faster, etc.)
-                device = transcription_engine.get_device()
-                local_result = transcription_engine.run_local_transcription(model_id, model_config, device, file_path)
-                analysis_input = local_result['text']
-                # Formata o diálogo para exibição
-                dialogue_lines = [f"**`[{str(datetime.timedelta(seconds=int(s.get('start',0))))}]`:** {s.get('text','').strip()}" for s in local_result['segments']]
-                full_dialogue = "\n\n".join(dialogue_lines)
+            else:
+                # Qualquer outro modelo é direcionado para a API externa
+                full_dialogue, analysis_input = transcribe_via_api(file_path, filename, model_id, entry_id)
 
         elif file_type == 'text':
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -210,11 +278,32 @@ def process_file_pipeline(entry_id, file_path, filename, file_type, model_id):
 
 # --- ROTAS DA API ---
 
+def get_available_models_from_api():
+    """Função auxiliar para buscar modelos da API externa."""
+    try:
+        response = requests.get(f"{public_url_api}/models", timeout=5)
+        if response.status_code == 200:
+            return response.json().get('available_models', [])
+    except requests.exceptions.RequestException as e:
+        print(f"AVISO: Não foi possível contactar a API de transcrição em {public_url_api}. Erro: {e}")
+    return []
+
 @app.route('/api/get_transcription_models', methods=['GET'])
 def get_models():
-    """Nova rota para o frontend saber quais modelos estão disponíveis."""
-    available_models = transcription_engine.get_available_models_for_device()
-    return jsonify(list(available_models.keys()))
+    """
+    Retorna uma lista de modelos disponíveis, priorizando a API externa.
+    """
+    api_models = get_available_models_from_api()
+    
+    # Garante que o Chirp não seja duplicado se a API o retornar
+    if 'google_chirp' in api_models:
+        api_models.remove('google_chirp')
+        
+    # A lista final tem os modelos da API primeiro, depois o Chirp como opção.
+    available_models = api_models + ['google_chirp']
+        
+    return jsonify(available_models)
+
 
 @app.route('/api/upload', methods=['POST'])
 def upload_files():
@@ -222,7 +311,19 @@ def upload_files():
     
     files = request.files.getlist('files[]')
     batch_name = request.form.get('batchName') or f"Lote de {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-    model_id = request.form.get('modelId', 'google_chirp')
+    
+    # Lógica para definir o modelo padrão
+    api_models = get_available_models_from_api()
+    default_model = 'google_chirp' # Fallback inicial
+
+    # Procura por um modelo "whisper" como preferencial
+    whisper_models = [m for m in api_models if 'whisper' in m.lower()]
+    if whisper_models:
+        default_model = whisper_models[0] # Pega o primeiro whisper que encontrar
+    elif api_models:
+        default_model = api_models[0] # Se não tiver whisper, pega o primeiro da API
+        
+    model_id = request.form.get('modelId', default_model)
     
     ALLOWED_EXTENSIONS = {'.wav', '.mp3', '.flac', '.ogg', '.txt'}
     files_to_process = [f for f in files if os.path.splitext(f.filename)[1].lower() in ALLOWED_EXTENSIONS]
@@ -240,7 +341,10 @@ def upload_files():
                     filename = secure_filename(file.filename)
                     ext = os.path.splitext(filename)[1].lower()
                     
-                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    temp_dir = os.path.join(app.config['UPLOAD_FOLDER'], str(batch_id))
+                    os.makedirs(temp_dir, exist_ok=True)
+                    file_path = os.path.join(temp_dir, filename)
+                    file.seek(0)
                     file.save(file_path)
 
                     file_type = 'audio' if ext != '.txt' else 'text'
@@ -259,7 +363,7 @@ def upload_files():
         print(f"Erro no upload: {e}")
         return jsonify({"error": f"Erro interno do servidor: {e}"}), 500
         
-    message = f"Lote '{batch_name}' recebido. {len(files_to_process)} ficheiros enviados para o pipeline."
+    message = f"Lote '{batch_name}' recebido. {len(files_to_process)} ficheiros enviados para o pipeline com o modelo '{model_id}'."
     return jsonify({"message": message, "batch_id": batch_id}), 202
 
 @app.route('/')
@@ -301,7 +405,24 @@ def get_batch_details(batch_id):
     query = "SELECT id, filename, status FROM transcriptions WHERE batch_id = :batch_id ORDER BY id"
     with engine.connect() as connection:
         result = connection.execute(text(query), {"batch_id": batch_id})
-        files = [dict(row) for row in result.mappings()]
+        files = []
+        for row in result.mappings():
+            file_data = dict(row)
+            status_str = file_data.get('status', '')
+            progress = None
+            # Extrai o progresso numérico para a barra de progresso no frontend
+            if '(API):' in status_str and '%' in status_str:
+                try:
+                    progress_str = status_str.split('(API):')[1].strip().replace('%', '')
+                    progress = int(progress_str)
+                except (ValueError, IndexError):
+                    progress = 0 # Se falhar, mostra 0
+            elif status_str == 'Concluído':
+                progress = 100
+            
+            file_data['progress'] = progress
+            files.append(file_data)
+
     return jsonify(files)
 
 @app.route('/api/transcription/<int:transcription_id>', methods=['GET'])
@@ -322,4 +443,3 @@ def get_transcription_text(transcription_id):
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=5000, debug=True)
-        
