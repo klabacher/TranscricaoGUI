@@ -4,4 +4,4 @@ __pycache__
 *.pyc
 .env
 
-SQLite.sql
+database.db
