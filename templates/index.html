@@ -1,780 +1,426 @@
-<!DOCTYPE html>
-<html lang="pt-br"> <!-- O JS adicionará a classe 'dark' aqui -->
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard de Análise IA</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script>
-        tailwind.config = { darkMode: 'class' }
-    </script>
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        .nav-button.active { @apply bg-blue-600 text-white; }
-        .page-content { display: none; }
-        .page-content.active { display: block; }
-        /* Estilos base (light mode) */
-        .card { @apply bg-white border border-gray-200 rounded-xl p-6 shadow-lg; }
-        /* Estilos para dark mode */
-        .dark .card { @apply bg-gray-800 border-gray-700; }
-        .chart-container { position: relative; height: 300px; width: 100%; }
-        .filter-select { -webkit-appearance: none; -moz-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-position: right 0.5rem center; background-repeat: no-repeat; background-size: 1.5em 1.5em; padding-right: 2.5rem; }
-        .modal-overlay { transition: opacity 0.3s ease; }
-        .batch-row { cursor: pointer; }
-        .files-row { display: none; }
-        .analysis-row { cursor: pointer; }
-    </style>
-</head>
-<body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-300">
-    <main class="max-w-7xl mx-auto space-y-8 p-4 md:p-8">
-        <header class="flex flex-col md:flex-row items-center justify-between">
-            <div>
-                <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Plataforma de Análise IA</h1>
-                <p class="text-gray-600 dark:text-gray-400 mt-1">Insights acionáveis a partir das suas transcrições.</p>
-            </div>
-            <div class="flex items-center gap-4 mt-4 md:mt-0">
-                <nav class="flex p-1 bg-gray-200 dark:bg-gray-700 rounded-lg">
-                    <button data-page="dashboard" class="nav-button active text-gray-700 dark:text-gray-300 py-2 px-4 rounded-md text-sm font-medium">Dashboard</button>
-                    <button data-page="batches" class="nav-button text-gray-700 dark:text-gray-300 py-2 px-4 rounded-md text-sm font-medium">Lotes</button>
-                </nav>
-                <button id="theme-toggle" class="p-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                    <svg id="theme-toggle-light-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 14.95a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414l-.707.707zm-2.12-10.607a1 1 0 011.414 0l.707.707a1 1 0 11-1.414 1.414l-.707-.707a1 1 0 010-1.414zM4 11a1 1 0 100-2H3a1 1 0 100 2h1z" fill-rule="evenodd" clip-rule="evenodd"></path></svg>
-                    <svg id="theme-toggle-dark-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
-                </button>
-            </div>
-        </header>
+import os
+import json
+from datetime import datetime
+from flask import Flask, request, jsonify, render_template, abort, send_file, Response
+from flask_cors import CORS
+from sqlalchemy import create_engine, text
+from werkzeug.utils import secure_filename
+import threading
+import io
+import pandas as pd
+import hashlib
+import librosa
+import requests # Adicionado para fazer chamadas à API
+import time # Adicionado para pausas durante o polling
 
-        <!-- Conteúdo do Dashboard -->
-        <div id="page-dashboard" class="page-content active space-y-8">
-            <section class="card flex flex-wrap items-center gap-4 justify-between">
-                <div class="flex flex-wrap items-center gap-4">
-                    <h3 class="text-md font-semibold text-gray-700 dark:text-gray-300 mr-4">Filtros:</h3>
-                    <div>
-                        <label for="batch-filter" class="text-sm font-medium text-gray-500 dark:text-gray-400">Lote</label>
-                        <select id="batch-filter" class="filter-select mt-1 block w-full pl-3 pr-10 py-2 text-base bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md text-gray-900 dark:text-gray-100">
-                            <option value="all">Todos os Lotes</option>
-                        </select>
-                    </div>
-                </div>
-                <div>
-                    <button id="export-excel-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-2" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM5.5 9.5a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v5a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-5zM10 5.5a.5.5 0 01.5.5v9a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-9a.5.5 0 01.5-.5h2zM14.5 9.5a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v5a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-5z" />
-                        </svg>
-                        Exportar para Excel
-                    </button>
-                </div>
-            </section>
-            <section id="kpis" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"></section>
-            <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="card">
-                    <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Distribuição de Sentimentos</h2>
-                    <div class="chart-container"><canvas id="sentimentChart"></canvas></div>
-                </div>
-                <div class="card">
-                    <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Principais Tópicos Mencionados</h2>
-                    <div class="chart-container"><canvas id="topicsChart"></canvas></div>
-                </div>
-            </section>
-            <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="card lg:col-span-2">
-                     <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Insights Acionáveis (Análise com IA)</h2>
-                     <p class="text-gray-600 dark:text-gray-400 mt-2 mb-4">Faça uma pergunta para obter um insight gerado pela IA com base nos dados filtrados.</p>
-                    <form id="interactive-form">
-                        <textarea id="interactive-prompt" class="w-full p-3 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 rounded-lg text-gray-900 dark:text-gray-200" rows="3" placeholder="Ex: Quais são as principais queixas sobre finanças?"></textarea>
-                        <button type="submit" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">Perguntar à IA</button>
-                    </form>
-                    <div id="interactive-result-container" class="mt-6 p-4 bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 hidden">
-                        <h3 class="font-semibold text-lg mb-2 text-gray-900 dark:text-white">Resposta da IA:</h3>
-                        <div id="interactive-result" class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap"></div>
-                    </div>
-                </div>
-                <div class="card">
-                    <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Níveis de Engajamento</h2>
-                    <div class="chart-container"><canvas id="engagementChart"></canvas></div>
-                </div>
-            </section>
-             <section class="card">
-                <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Detalhes das Análises (Clique para analisar)</h2>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left">
-                        <thead class="border-b border-gray-200 dark:border-gray-600">
-                            <tr>
-                                <th class="p-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Lote</th>
-                                <th class="p-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Sentimento</th>
-                                <th class="p-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tópico Principal</th>
-                                <th class="p-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Engajamento</th>
-                                <th class="p-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Resumo do Insight</th>
-                            </tr>
-                        </thead>
-                        <tbody id="dataTable" class="divide-y divide-gray-200 dark:divide-gray-700"></tbody>
-                    </table>
-                </div>
-            </section>
-        </div>
+# --- Imports da Google Cloud e Vertex AI ---
+from google.cloud import speech
+from google.api_core import exceptions as google_exceptions
+from dotenv import load_dotenv
+import vertexai
+from vertexai.generative_models import GenerativeModel, Part
 
-        <!-- Conteúdo dos Lotes -->
-        <div id="page-batches" class="page-content space-y-8"></div>
+# --- Configuração Inicial e Carregamento de Variáveis ---
+load_dotenv()
 
-    </main>
+public_url_gui = os.getenv("PUBLIC_URL_GUI")
+public_url_api = os.getenv("PUBLIC_URL_API", "http://127.0.0.1:8000")
+
+PROJECT_ID = "transcricao-467718" 
+LOCATION = "us-central1"
+
+try:
+    vertexai.init(project=PROJECT_ID, location=LOCATION)
+except Exception as e:
+    print(f"AVISO: Não foi possível inicializar a Vertex AI. Verifique a autenticação gcloud. Erro: {e}")
+
+
+UPLOAD_FOLDER = 'uploads'
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+app = Flask(__name__, template_folder='templates')
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+CORS(app)
+
+db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database.db')
+engine = create_engine(f'sqlite:///{db_path}')
+
+# --- FUNÇÃO DE TRANSCRIÇÃO VIA API EXTERNA ---
+
+def transcribe_via_api(file_path, filename, model_id, entry_id):
+    """
+    Orquestra a transcrição usando a API externa.
+    Envia o job, monitora o status e baixa o resultado.
+    """
+    print(f"Redirecionando '{filename}' para a API de transcrição externa no modelo '{model_id}'...")
     
-    <!-- Template para a página de Lotes -->
-    <template id="batch-page-template">
-        <div class="space-y-8">
-            <div class="card">
-                <h2 class="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Novo Lote de Ficheiros</h2>
-                <form id="upload-form">
-                    <div class="mb-4">
-                        <label for="batch-name-input" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Nome do Lote (Opcional)</label>
-                        <input type="text" id="batch-name-input" placeholder="Ex: Campanha de Marketing - Julho" class="block w-full text-sm text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-2.5">
-                    </div>
-                    <div>
-                        <label for="file-upload-input" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Selecione ficheiros de áudio ou texto:</label>
-                        <!-- ATUALIZAÇÃO: Removido 'webkitdirectory' para permitir seleção de ficheiros individuais -->
-                        <input type="file" id="file-upload-input" name="files[]" class="block w-full text-sm border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400" multiple accept=".wav,.mp3,.flac,.ogg,.txt">
-                        <p id="file-count-info" class="mt-1 text-sm text-gray-500 dark:text-gray-400"></p>
-                    </div>
-                    <button type="submit" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">Enviar para Análise</button>
-                </form>
-                <div id="upload-status" class="mt-4 text-center"></div>
-            </div>
-            <div class="card">
-                <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Histórico de Lotes (Clique para expandir)</h2>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                        <thead class="bg-gray-50 dark:bg-gray-700/50">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Nome do Lote</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Data de Criação</th>
-                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Ficheiros</th>
-                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody id="batches-table" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 text-sm"></tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="bg-red-100 dark:bg-red-900/50 p-6 rounded-xl border border-red-300 dark:border-red-700">
-                <h2 class="text-xl font-semibold text-red-800 dark:text-red-300">Zona de Perigo</h2>
-                <p class="text-red-600 dark:text-red-400 mt-2">As ações abaixo são irreversíveis. Tenha certeza do que está a fazer.</p>
-                <div class="mt-4">
-                    <button id="clear-all-data-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Limpar Todos os Dados</button>
-                </div>
-            </div>
-        </div>
-    </template>
-
-    <!-- Modal de Análise Individual -->
-    <div id="transcription-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 hidden z-50">
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col border border-gray-200 dark:border-gray-700">
-            <!-- Header do Modal -->
-            <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center flex-shrink-0">
-                <h3 id="modal-title" class="text-xl font-semibold text-gray-900 dark:text-white">Análise Individual</h3>
-                <button id="modal-close-btn" class="text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-200 text-3xl leading-none">&times;</button>
-            </div>
-            
-            <!-- Conteúdo do Modal -->
-            <div class="p-6 overflow-y-auto space-y-6">
-                <!-- Texto da Transcrição -->
-                <div>
-                    <h4 class="font-semibold text-lg mb-2 text-gray-800 dark:text-gray-200">Conteúdo Analisado</h4>
-                    <div id="modal-content" class="p-4 bg-gray-100 dark:bg-gray-900/50 rounded-lg text-gray-700 dark:text-gray-300 leading-relaxed max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-700">
-                        <p>A carregar...</p>
-                    </div>
-                </div>
-
-                <!-- Análise Interativa -->
-                <div id="modal-interactive-analysis">
-                    <h4 class="font-semibold text-lg mb-2 text-gray-800 dark:text-gray-200">Pergunte à IA sobre este Conteúdo</h4>
-                    <form id="modal-interactive-form">
-                        <textarea id="modal-interactive-prompt" class="w-full p-3 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 rounded-lg text-gray-900 dark:text-gray-200" rows="2" placeholder="Ex: Quais foram os principais pontos de dor mencionados?"></textarea>
-                        <button type="submit" class="mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Analisar</button>
-                    </form>
-                    <div id="modal-interactive-result-container" class="mt-4 p-4 bg-gray-100 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700 hidden">
-                        <h5 class="font-semibold text-md mb-2 text-gray-800 dark:text-gray-200">Resposta da IA:</h5>
-                        <div id="modal-interactive-result" class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const API_BASE_URL = 'http://127.0.0.1:5000';
-        let activeCharts = {};
-        let activeTimers = {};
-
-        // --- Lógica do Tema Escuro/Claro ---
-        const themeToggleBtn = document.getElementById('theme-toggle');
-        const lightIcon = document.getElementById('theme-toggle-light-icon');
-        const darkIcon = document.getElementById('theme-toggle-dark-icon');
-
-        const applyTheme = (isDark) => {
-            document.documentElement.classList.toggle('dark', isDark);
-            if(lightIcon) lightIcon.classList.toggle('hidden', isDark);
-            if(darkIcon) darkIcon.classList.toggle('hidden', !isDark);
-        };
-        
-        const initializeTheme = () => {
-            const isDark = localStorage.getItem('color-theme') === 'dark' || (!('color-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
-            applyTheme(isDark);
-        }
-
-        themeToggleBtn.addEventListener('click', function() {
-            const isDark = !document.documentElement.classList.contains('dark');
-            localStorage.setItem('color-theme', isDark ? 'dark' : 'light');
-            applyTheme(isDark);
-            if (document.getElementById('page-dashboard').classList.contains('active')) {
-                applyFilters(document.getElementById('batch-filter').value);
+    # Etapa 1: Enviar o job para a API
+    try:
+        with open(file_path, 'rb') as f:
+            files = {'files': (filename, f, 'audio/ogg')}
+            payload = {
+                'model_id': model_id,
+                'session_id': str(entry_id),
+                'language': 'pt'
             }
-        });
+            response = requests.post(f"{public_url_api}/jobs", files=files, data=payload, timeout=30)
+            response.raise_for_status()
+        
+        job_info = response.json().get('jobs_created', [])
+        if not job_info:
+            raise ValueError("A API não retornou um ID de job válido.")
+        job_id = job_info[0]['job_id']
+        print(f"Job criado na API com sucesso. ID: {job_id}")
 
-        // --- Lógica de Navegação Principal ---
-        const navButtons = document.querySelectorAll('.nav-button');
-        const pageContents = document.querySelectorAll('.page-content');
-        navButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                const pageId = button.dataset.page;
-                navButtons.forEach(btn => btn.classList.remove('active'));
-                pageContents.forEach(content => content.classList.remove('active'));
-                button.classList.add('active');
-                const page = document.getElementById(`page-${pageId}`);
-                if(page) page.classList.add('active');
+    except requests.exceptions.RequestException as e:
+        raise ConnectionError(f"Falha ao conectar ou enviar job para a API de transcrição: {e}")
+    except Exception as e:
+        raise ValueError(f"Erro ao processar resposta da criação de job da API: {e}")
+
+    # Etapa 2: Monitorar (poll) o status do job
+    while True:
+        try:
+            status_response = requests.get(f"{public_url_api}/jobs/{job_id}", timeout=10)
+            status_response.raise_for_status()
+            job_status = status_response.json()
+            
+            status = job_status.get('status')
+            progress = job_status.get('progress', 0)
+
+            with engine.connect() as connection:
+                connection.execute(text("UPDATE transcriptions SET status = :status WHERE id = :id"), 
+                                   {"status": f"A transcrever (API): {progress}%", "id": entry_id})
+                connection.commit()
+
+            if status == 'completed':
+                print(f"Job {job_id} concluído na API.")
+                break
+            elif status in ['failed', 'cancelled']:
+                error_details = job_status.get('debug_log', ['Erro desconhecido na API.'])[-1]
+                raise RuntimeError(f"Job na API falhou ou foi cancelado. Detalhe: {error_details}")
+            
+            time.sleep(5)
+
+        except requests.exceptions.RequestException as e:
+            raise ConnectionError(f"Falha ao verificar status do job na API: {e}")
+
+    # Etapa 3: Baixar o resultado
+    try:
+        download_response = requests.get(f"{public_url_api}/jobs/{job_id}/download", params={"text_type": "transcription_dialogue_markdown"}, timeout=30)
+        download_response.raise_for_status()
+        full_dialogue = download_response.text
+
+        download_simple_response = requests.get(f"{public_url_api}/jobs/{job_id}/download", params={"text_type": "transcription_raw"}, timeout=30)
+        download_simple_response.raise_for_status()
+        analysis_input = download_simple_response.text
+
+        return full_dialogue, analysis_input
+
+    except requests.exceptions.RequestException as e:
+        raise ConnectionError(f"Falha ao baixar resultado da API: {e}")
+
+
+# --- FUNÇÕES DE PROCESSAMENTO DE IA (AGENTES) ---
+
+def transcribe_with_google_chirp(file_path):
+    """Função específica para o modelo Chirp da Google, mantida para compatibilidade."""
+    try:
+        client = speech.SpeechClient()
+        _, sr = librosa.load(file_path, sr=None)
+        
+        with io.open(file_path, "rb") as audio_file:
+            content = audio_file.read()
+        
+        audio = speech.RecognitionAudio(content=content)
+        config = speech.RecognitionConfig(
+            auto_decoding_config={}, model="chirp", language_codes=["pt-BR"],
+            features=speech.RecognitionFeatures(
+                enable_automatic_punctuation=True, enable_speaker_diarization=True,
+                min_speaker_count=1, max_speaker_count=2
+            ),
+        )
+        
+        print(f"A enviar '{os.path.basename(file_path)}' para o Google Chirp...")
+        request_chirp = speech.RecognizeRequest(config=config, audio=audio, recognizer=f"projects/{PROJECT_ID}/locations/global/recognizers/_")
+        response = client.recognize(request=request_chirp)
+
+        if not response.results:
+            raise ValueError("A API de transcrição Google não retornou resultados.")
+
+        result = response.results[-1]
+        if not result.alternatives or not result.alternatives[0].words:
+            return result.alternatives[0].transcript, result.alternatives[0].transcript
+
+        words_info = result.alternatives[0].words
+        full_transcript = ""
+        current_speaker = None
+        for word in words_info:
+            if word.speaker != current_speaker:
+                current_speaker = word.speaker
+                full_transcript += f"\n\n**Interveniente {current_speaker}:** "
+            full_transcript += word.word + " "
+        return full_transcript.strip(), result.alternatives[0].transcript
+    except Exception as e:
+        print(f"Erro no agente de transcrição Google Chirp: {e}")
+        return f"Erro na transcrição com Google: {e}", None
+
+def run_ai_analysis_pipeline(transcript_text):
+    """Pipeline de Agentes de Análise com Gemini (sem alterações)."""
+    if not transcript_text:
+        return {"error": "Texto para análise está vazio."}
+
+    model = GenerativeModel("gemini-1.5-flash-preview-0514")
+    # CORREÇÃO: Formatação do JSON no prompt
+    prompt = f"""
+    Você é um sistema de múltiplos agentes de IA para análise de conversas. Analise a seguinte transcrição e retorne um objeto JSON.
+
+    **Transcrição:**
+    ---
+    {transcript_text}
+    ---
+
+    **Tarefas dos Agentes:**
+    1.  **Agente de Identificação:** Identifique o "Operador" e o "Aluno". Se não for claro, use "Interveniente 1" e "Interveniente 2".
+    2.  **Agente de Resumo:** Crie um resumo executivo conciso da conversa.
+    3.  **Agente de Sentimento:** Analise o sentimento geral do Aluno ("Positivo", "Negativo", "Neutro").
+    4.  **Agente de Tópicos:** Qual é o tópico principal da conversa em 2-3 palavras?
+    5.  **Agente de Ação:** Identifique até 3 itens de ação claros. Se não houver, retorne uma lista vazia.
+
+    **Formato de Saída Obrigatório (APENAS JSON VÁLIDO):**
+    {{
+      "speaker_identification": {{ "operator": "...", "student": "..." }},
+      "summary": "...",
+      "sentiment": "...",
+      "main_topic": "...",
+      "action_items": []
+    }}
+    """
+    try:
+        response = model.generate_content(prompt)
+        # Limpa a resposta para garantir que pegamos apenas o JSON
+        json_text = response.text.strip()
+        start_index = json_text.find('{')
+        end_index = json_text.rfind('}') + 1
+        if start_index == -1 or end_index == 0:
+            raise ValueError(f"Nenhum JSON encontrado na resposta da IA. Resposta recebida: {json_text}")
+        
+        cleaned_json = json_text[start_index:end_index]
+        return json.loads(cleaned_json)
+        
+    except Exception as e:
+        print(f"Erro no pipeline de análise com IA: {e}")
+        return {"error": f"Falha na análise da IA: {e}"}
+
+# --- PROCESSAMENTO EM BACKGROUND ---
+
+def process_file_pipeline(entry_id, file_path, filename, file_type, model_id):
+    """Orquestrador do pipeline de processamento para cada ficheiro."""
+    print(f"Iniciando pipeline para '{filename}' (ID: {entry_id}) com o modelo '{model_id}'")
+    full_dialogue = None
+    analysis_input = None
+    
+    try:
+        if file_type == 'audio':
+            with engine.connect() as connection:
+                connection.execute(text("UPDATE transcriptions SET status = :status WHERE id = :id"), {"status": f"Aguardando na fila para '{model_id}'...", "id": entry_id})
+                connection.commit()
+            
+            if model_id == 'google_chirp':
+                full_dialogue, analysis_input = transcribe_with_google_chirp(file_path)
+            else:
+                full_dialogue, analysis_input = transcribe_via_api(file_path, filename, model_id, entry_id)
+
+        elif file_type == 'text':
+            with open(file_path, 'r', encoding='utf-8') as f:
+                analysis_input = f.read()
+            full_dialogue = f"**Texto do Ficheiro:**\n\n{analysis_input}"
+        
+        if analysis_input is None:
+            raise ValueError(full_dialogue or "Falha ao obter texto para análise.")
+
+        with engine.connect() as connection:
+            connection.execute(text("UPDATE transcriptions SET transcript_text = :text, status = 'A Analisar com IA...' WHERE id = :id"), {"text": full_dialogue, "id": entry_id})
+            connection.commit()
+        
+        analysis_result = run_ai_analysis_pipeline(analysis_input)
+        if "error" in analysis_result:
+             raise ValueError(analysis_result["error"])
+
+        with engine.connect() as connection:
+            analysis_json = json.dumps(analysis_result, ensure_ascii=False)
+            connection.execute(text("""
+                INSERT INTO analyses (transcription_id, sentiment, topic, summary, full_analysis_json)
+                VALUES (:transcription_id, :sentiment, :topic, :summary, :full_analysis_json)
+            """), {
+                "transcription_id": entry_id, "sentiment": analysis_result.get("sentiment"), "topic": analysis_result.get("main_topic"),
+                "summary": analysis_result.get("summary"), "full_analysis_json": analysis_json
+            })
+            connection.execute(text("UPDATE transcriptions SET status = 'Concluído' WHERE id = :id"), {"id": entry_id})
+            connection.commit()
+            print(f"Pipeline concluído com sucesso para '{filename}'.")
+
+    except Exception as e:
+        error_message = f"Erro no pipeline: {e}"
+        print(error_message)
+        with engine.connect() as connection:
+            connection.execute(text("UPDATE transcriptions SET status = :status, transcript_text = :text WHERE id = :id"), {"status": error_message, "text": (full_dialogue or str(e)), "id": entry_id})
+            connection.commit()
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"Ficheiro temporário removido: {filename}")
+
+# --- ROTAS DA API ---
+
+def get_available_models_from_api():
+    """Função auxiliar para buscar modelos da API externa."""
+    try:
+        response = requests.get(f"{public_url_api}/models", timeout=5)
+        if response.status_code == 200:
+            return response.json().get('available_models', [])
+    except requests.exceptions.RequestException as e:
+        print(f"AVISO: Não foi possível contactar a API de transcrição em {public_url_api}. Erro: {e}")
+    return []
+
+@app.route('/api/get_transcription_models', methods=['GET'])
+def get_models():
+    """Retorna uma lista de modelos disponíveis, priorizando a API externa."""
+    api_models = get_available_models_from_api()
+    if 'google_chirp' in api_models:
+        api_models.remove('google_chirp')
+    available_models = api_models + ['google_chirp']
+    return jsonify(available_models)
+
+
+@app.route('/api/upload', methods=['POST'])
+def upload_files():
+    if 'files[]' not in request.files: return jsonify({"error": "Nenhum ficheiro enviado"}), 400
+    
+    files = request.files.getlist('files[]')
+    batch_name = request.form.get('batchName') or f"Lote de {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+    
+    api_models = get_available_models_from_api()
+    default_model = 'google_chirp'
+    whisper_models = [m for m in api_models if 'whisper' in m.lower()]
+    if whisper_models:
+        default_model = whisper_models[0]
+    elif api_models:
+        default_model = api_models[0]
+        
+    model_id = request.form.get('modelId', default_model)
+    
+    ALLOWED_EXTENSIONS = {'.wav', '.mp3', '.flac', '.ogg', '.txt'}
+    files_to_process = [f for f in files if os.path.splitext(f.filename)[1].lower() in ALLOWED_EXTENSIONS]
+
+    if not files_to_process: return jsonify({"error": "Nenhum ficheiro válido encontrado."}), 400
+
+    try:
+        with engine.connect() as connection:
+            with connection.begin() as transaction:
+                result = connection.execute(text("INSERT INTO batches (name, created_at) VALUES (:name, :created_at)"),
+                                            {"name": batch_name, "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+                batch_id = result.lastrowid
                 
-                if (pageId === 'dashboard') fetchAndRenderDashboard();
-                if (pageId === 'batches') {
-                    const batchPage = document.getElementById('page-batches');
-                    if(!batchPage.innerHTML.trim()) {
-                        batchPage.innerHTML = document.getElementById('batch-page-template').innerHTML;
-                        initializeBatchPageListeners();
-                    }
-                    loadBatchesData();
-                }
-            });
-        });
-        
-        // --- Lógica do Dashboard ---
-        const batchFilter = document.getElementById('batch-filter');
-
-        async function fetchAndRenderDashboard() {
-            try {
-                const batchResponse = await fetch(`${API_BASE_URL}/api/batches`);
-                const allBatches = await batchResponse.json();
-                populateBatchFilter(allBatches);
-                await applyFilters(batchFilter.value);
-            } catch (error) { console.error("Erro ao carregar dados do dashboard:", error); }
-        }
-        
-        function populateBatchFilter(batches) {
-            if (!batchFilter) return;
-            const currentVal = batchFilter.value;
-            batchFilter.innerHTML = '<option value="all">Todos os Lotes</option>';
-            batches.forEach(b => batchFilter.innerHTML += `<option value="${b.id}">${b.name} (ID: ${b.id})</option>`);
-            batchFilter.value = currentVal;
-        }
-        
-        async function applyFilters(batchId = 'all') {
-            try {
-                const dataUrl = new URL(`${API_BASE_URL}/api/dashboard_data`);
-                if (batchId !== 'all') {
-                    dataUrl.searchParams.append('batch_id', batchId);
-                }
-                const dataResponse = await fetch(dataUrl);
-                const filteredData = await dataResponse.json();
-                renderDashboard(filteredData);
-            } catch (error) { console.error("Erro ao aplicar filtros:", error); }
-        }
-
-        if(batchFilter) batchFilter.addEventListener('change', (e) => applyFilters(e.target.value));
-
-        function renderDashboard(data) {
-            destroyCharts();
-            renderKPIs(data);
-            renderSentimentDonut(data);
-            renderTopicsBar(data);
-            renderEngagementPolar(data);
-            renderDetailsTable(data);
-            initializeExportButton();
-        }
-
-        function destroyCharts() {
-            Object.values(activeCharts).forEach(chart => {
-                if (chart) chart.destroy();
-            });
-            activeCharts = {};
-        }
-
-        function getChartColors() {
-            const isDark = document.documentElement.classList.contains('dark');
-            return {
-                textColor: isDark ? '#d1d5db' : '#374151',
-                gridColor: isDark ? '#374151' : '#e5e7eb',
-                sentiment: { 'Positivo': '#22c55e', 'Negativo': '#ef4444', 'Neutro': '#f59e0b' },
-                engagement: { 'Alto': '#3b82f6', 'Médio': '#8b5cf6', 'Baixo': '#6366f1' },
-                topics: isDark? 'rgba(59, 130, 246, 0.7)' : 'rgba(59, 130, 246, 0.8)',
-                donutBorder: isDark ? '#1f2937' : '#ffffff'
-            };
-        }
-
-        function renderKPIs(data) {
-            const kpiContainer = document.getElementById('kpis');
-            if(!kpiContainer) return;
-            if (!data || data.length === 0) {
-                kpiContainer.innerHTML = `<p class="text-gray-500 dark:text-gray-400 col-span-full text-center">Nenhum dado encontrado para os filtros selecionados.</p>`;
-                return;
-            }
-            const totalAnalises = data.length;
-            const sentimentCounts = data.reduce((acc, item) => { acc[item.sentiment] = (acc[item.sentiment] || 0) + 1; return acc; }, {});
-            const predominantSentiment = Object.keys(sentimentCounts).length ? Object.keys(sentimentCounts).reduce((a, b) => sentimentCounts[a] > sentimentCounts[b] ? a : b) : 'N/A';
-            const problemTopics = data.filter(d => d.sentiment === 'Negativo').reduce((acc, item) => { acc[item.topic] = (acc[item.topic] || 0) + 1; return acc; }, {});
-            const topProblem = Object.keys(problemTopics).length ? Object.keys(problemTopics).reduce((a, b) => problemTopics[a] > problemTopics[b] ? a : b) : 'Nenhum';
-            const engagementCounts = data.reduce((acc, item) => { acc[item.engagement] = (acc[item.engagement] || 0) + 1; return acc; }, {});
-            const predominantEngagement = Object.keys(engagementCounts).length ? Object.keys(engagementCounts).reduce((a, b) => engagementCounts[a] > engagementCounts[b] ? a : b) : 'N/A';
-
-            kpiContainer.innerHTML = `
-                <div class="card text-center">
-                    <h3 class="text-gray-500 dark:text-gray-400 text-sm font-medium uppercase">Total de Análises</h3>
-                    <p class="text-4xl font-bold text-gray-900 dark:text-white mt-2">${totalAnalises}</p>
-                </div>
-                <div class="card text-center">
-                    <h3 class="text-gray-500 dark:text-gray-400 text-sm font-medium uppercase">Sentimento Predominante</h3>
-                    <p class="text-4xl font-bold text-amber-500 dark:text-amber-400 mt-2">${predominantSentiment}</p>
-                </div>
-                <div class="card text-center">
-                    <h3 class="text-gray-500 dark:text-gray-400 text-sm font-medium uppercase">Principal Desafio</h3>
-                    <p class="text-4xl font-bold text-red-600 dark:text-red-500 mt-2">${topProblem}</p>
-                </div>
-                 <div class="card text-center">
-                    <h3 class="text-gray-500 dark:text-gray-400 text-sm font-medium uppercase">Engajamento Médio</h3>
-                    <p class="text-4xl font-bold text-blue-600 dark:text-blue-500 mt-2">${predominantEngagement}</p>
-                </div>`;
-        }
-        
-        function renderSentimentDonut(data) {
-            const ctx = document.getElementById('sentimentChart')?.getContext('2d');
-            if(!ctx) return;
-            const colors = getChartColors();
-            const sentimentCounts = data.reduce((acc, item) => { acc[item.sentiment] = (acc[item.sentiment] || 0) + 1; return acc; }, {});
-            
-            activeCharts.sentiment = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: Object.keys(sentimentCounts),
-                    datasets: [{
-                        data: Object.values(sentimentCounts),
-                        backgroundColor: Object.keys(sentimentCounts).map(key => colors.sentiment[key] || '#9ca3af'),
-                        borderColor: colors.donutBorder, borderWidth: 4,
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { position: 'bottom', labels: { color: colors.textColor } } }
-                }
-            });
-        }
-
-        function renderTopicsBar(data) {
-            const ctx = document.getElementById('topicsChart')?.getContext('2d');
-            if(!ctx) return;
-            const colors = getChartColors();
-            const topicCounts = data.reduce((acc, item) => { acc[item.topic] = (acc[item.topic] || 0) + 1; return acc; }, {});
-
-            activeCharts.topics = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: Object.keys(topicCounts),
-                    datasets: [{
-                        label: 'Nº de Menções', data: Object.values(topicCounts),
-                        backgroundColor: colors.topics,
-                    }]
-                },
-                options: {
-                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-                    scales: {
-                        x: { ticks: { color: colors.textColor }, grid: { color: colors.gridColor } },
-                        y: { ticks: { color: colors.textColor }, grid: { display: false } }
-                    },
-                    plugins: { legend: { display: false } }
-                }
-            });
-        }
-
-        function renderEngagementPolar(data) {
-            const ctx = document.getElementById('engagementChart')?.getContext('2d');
-            if(!ctx) return;
-            const colors = getChartColors();
-            const engagementCounts = data.reduce((acc, item) => { acc[item.engagement] = (acc[item.engagement] || 0) + 1; return acc; }, {});
-
-            activeCharts.engagement = new Chart(ctx, {
-                type: 'polarArea',
-                data: {
-                    labels: Object.keys(engagementCounts),
-                    datasets: [{
-                        data: Object.values(engagementCounts),
-                        backgroundColor: Object.keys(engagementCounts).map(key => colors.engagement[key] || '#9ca3af'),
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    scales: { r: { ticks: { display: false }, grid: { color: colors.gridColor } } },
-                    plugins: { legend: { position: 'bottom', labels: { color: colors.textColor } } }
-                }
-            });
-        }
-        
-        function renderDetailsTable(data) {
-            const tableBody = document.getElementById('dataTable');
-            if (!tableBody) return;
-            tableBody.innerHTML = '';
-            if (!data || data.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-gray-500">Nenhum dado para exibir.</td></tr>`;
-                return;
-            }
-
-            const sentimentColors = { 'Positivo': 'text-green-600 dark:text-green-400', 'Negativo': 'text-red-600 dark:text-red-400', 'Neutro': 'text-amber-600 dark:text-amber-400' };
-            const engagementColors = { 'Alto': 'text-blue-600 dark:text-blue-400', 'Médio': 'text-purple-600 dark:text-purple-400', 'Baixo': 'text-indigo-600 dark:text-indigo-400' };
-
-            data.forEach(item => {
-                const row = document.createElement('tr');
-                row.className = 'analysis-row hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors';
-                row.dataset.id = item.id;
-                row.innerHTML = `
-                    <td class="p-3 text-sm text-gray-700 dark:text-gray-300">${item.batch_name}</td>
-                    <td class="p-3 font-medium ${sentimentColors[item.sentiment] || ''}">${item.sentiment}</td>
-                    <td class="p-3 text-gray-700 dark:text-gray-300">${item.topic}</td>
-                    <td class="p-3 font-medium ${engagementColors[item.engagement] || ''}">${item.engagement}</td>
-                    <td class="p-3 text-gray-500 dark:text-gray-400 text-sm">${item.summary}</td>
-                `;
-                tableBody.appendChild(row);
-            });
-
-            tableBody.querySelectorAll('.analysis-row').forEach(row => {
-                row.addEventListener('click', () => openAnalysisModal(row.dataset.id));
-            });
-        }
-
-        // --- Lógica da Análise Interativa (Dashboard) ---
-        const interactiveForm = document.getElementById('interactive-form');
-        if(interactiveForm) {
-            interactiveForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const promptInput = document.getElementById('interactive-prompt');
-                const resultContainer = document.getElementById('interactive-result-container');
-                const resultDiv = document.getElementById('interactive-result');
-                const button = interactiveForm.querySelector('button');
-                const prompt = promptInput.value;
-                if (!prompt.trim()) return;
-
-                button.disabled = true; button.textContent = "A analisar...";
-                resultContainer.classList.remove('hidden');
-                resultDiv.textContent = "A IA está a pensar...";
-
-                try {
-                    const response = await fetch(`${API_BASE_URL}/api/interactive_analysis`, {
-                        method: 'POST', headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ prompt: prompt, batch_id: document.getElementById('batch-filter').value })
-                    });
-                    const result = await response.json();
-                    if(response.ok) { resultDiv.textContent = result.answer; } 
-                    else { throw new Error(result.error || "Erro desconhecido"); }
-                } catch (error) {
-                    resultDiv.textContent = `Erro: ${error.message}`;
-                } finally {
-                    button.disabled = false; button.textContent = "Perguntar à IA";
-                }
-            });
-        }
-        
-        // --- Lógica do Botão de Exportação ---
-        function initializeExportButton() {
-            const exportExcelBtn = document.getElementById('export-excel-btn');
-            if (exportExcelBtn) {
-                exportExcelBtn.addEventListener('click', () => {
-                    const batchId = document.getElementById('batch-filter').value;
-                    const exportUrl = new URL(`${API_BASE_URL}/api/export_insights`);
-                    if (batchId !== 'all') {
-                        exportUrl.searchParams.append('batch_id', batchId);
-                    }
-                    window.location.href = exportUrl.href;
-                });
-            }
-        }
-
-        // --- Lógica da Página de Lotes ---
-        function initializeBatchPageListeners() {
-            const uploadForm = document.getElementById('upload-form');
-            const fileUploadInput = document.getElementById('file-upload-input');
-            const fileCountInfo = document.getElementById('file-count-info');
-            const ALLOWED_EXTENSIONS = ['.wav', '.mp3', '.flac', '.ogg', '.txt'];
-
-            if (fileUploadInput) {
-                fileUploadInput.addEventListener('change', (event) => {
-                    const files = event.target.files;
-                    if (files.length > 0) {
-                        const validFiles = Array.from(files).filter(file => {
-                            const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
-                            return ALLOWED_EXTENSIONS.includes(extension);
-                        });
-                        fileCountInfo.textContent = `${validFiles.length} ficheiro(s) válidos selecionados de um total de ${files.length}.`;
-                    } else {
-                        fileCountInfo.textContent = '';
-                    }
-                });
-            }
-
-            if(uploadForm) {
-                uploadForm.addEventListener('submit', async (event) => {
-                    event.preventDefault();
-                    const batchNameInput = document.getElementById('batch-name-input');
-                    const uploadStatus = document.getElementById('upload-status');
+                for file in files_to_process:
+                    filename = secure_filename(file.filename)
+                    ext = os.path.splitext(filename)[1].lower()
                     
-                    if (fileUploadInput.files.length === 0) {
-                        uploadStatus.innerHTML = `<p class="text-yellow-500">Por favor, selecione um ou mais ficheiros.</p>`;
-                        return;
-                    }
+                    temp_dir = os.path.join(app.config['UPLOAD_FOLDER'], str(batch_id))
+                    os.makedirs(temp_dir, exist_ok=True)
+                    file_path = os.path.join(temp_dir, filename)
+                    file.seek(0)
+                    file.save(file_path)
 
-                    const formData = new FormData();
-                    formData.append('batchName', batchNameInput.value);
+                    file_type = 'audio' if ext != '.txt' else 'text'
                     
-                    let validFileCount = 0;
-                    for (const file of fileUploadInput.files) {
-                        const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
-                        if (ALLOWED_EXTENSIONS.includes(extension)) {
-                            formData.append('files[]', file);
-                            validFileCount++;
-                        }
-                    }
-
-                    if (validFileCount === 0) {
-                        uploadStatus.innerHTML = `<p class="text-yellow-500">Nenhum ficheiro válido (.wav, .mp3, .flac, .ogg, .txt) encontrado na seleção.</p>`;
-                        return;
-                    }
+                    trans_result = connection.execute(text("""
+                        INSERT INTO transcriptions (filename, upload_date, status, batch_id)
+                        VALUES (:filename, :upload_date, 'Na Fila', :batch_id)
+                    """), {"filename": filename, "upload_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "batch_id": batch_id})
+                    entry_id = trans_result.lastrowid
                     
-                    uploadStatus.innerHTML = `<p class="text-blue-500">A enviar lote e ${validFileCount} ficheiro(s)...</p>`;
-                    try {
-                        const response = await fetch(`${API_BASE_URL}/api/upload`, { method: 'POST', body: formData });
-                        const result = await response.json();
-                        if (response.ok) {
-                            uploadStatus.innerHTML = `<p class="text-green-500">${result.message} O processamento continuará em segundo plano.</p>`;
-                            batchNameInput.value = '';
-                            fileUploadInput.value = '';
-                            fileCountInfo.textContent = '';
-                            setTimeout(loadBatchesData, 2000);
-                        } else { throw new Error(result.error); }
-                    } catch (error) {
-                        uploadStatus.innerHTML = `<p class="text-red-500">Erro: ${error.message}</p>`;
-                    }
-                });
-            }
-
-            const clearDataBtn = document.getElementById('clear-all-data-btn');
-            if(clearDataBtn) {
-                clearDataBtn.addEventListener('click', async () => {
-                    if (confirm("TEM A CERTEZA?\nEsta ação irá apagar TODOS os lotes, transcrições e análises.\n\nEsta ação é IRREVERSÍVEL.")) {
-                        try {
-                            const response = await fetch(`${API_BASE_URL}/api/clear_all_data`, { method: 'DELETE' });
-                            const result = await response.json();
-                            alert(result.message || result.error);
-                            loadBatchesData();
-                            fetchAndRenderDashboard();
-                        } catch (error) { alert(`Erro ao limpar os dados: ${error.message}`); }
-                    }
-                });
-            }
-        }
-
-        async function loadBatchesData() {
-            try {
-                const response = await fetch(`${API_BASE_URL}/api/batches`);
-                const data = await response.json();
-                renderBatchesTable(data);
-            } catch (error) { console.error("Erro ao carregar lotes:", error); }
-        }
-
-        function renderBatchesTable(data) {
-            const tableBody = document.getElementById('batches-table');
-            if(!tableBody) return;
-            tableBody.innerHTML = '';
-            if (!data || data.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">Nenhum lote encontrado.</td></tr>`;
-                return;
-            }
-            data.forEach(item => {
-                // Ação de download do lote foi removida pois os ficheiros originais não são mais mantidos no servidor.
-                const row = `
-                    <tr class="batch-row hover:bg-gray-50 dark:hover:bg-gray-700/50" data-id="${item.id}">
-                        <td class="px-6 py-4 font-medium text-gray-900 dark:text-white">${item.name}</td>
-                        <td class="px-6 py-4 text-gray-500 dark:text-gray-400">${new Date(item.created_at).toLocaleString('pt-BR')}</td>
-                        <td class="px-6 py-4 text-center text-gray-500 dark:text-gray-400">${item.file_count}</td>
-                        <td class="px-6 py-4 text-center text-gray-400 text-xs">N/A</td>
-                    </tr>
-                    <tr class="files-row bg-gray-100 dark:bg-gray-900" id="files-for-batch-${item.id}">
-                        <td colspan="4" class="p-0"><div class="p-4"><div id="files-table-${item.id}">A carregar ficheiros...</div></div></td>
-                    </tr>
-                `;
-                tableBody.innerHTML += row;
-            });
-            document.querySelectorAll('.batch-row').forEach(el => el.addEventListener('click', toggleBatchFiles));
-        }
-
-        async function toggleBatchFiles(event) {
-            if (event.target.tagName === 'A') return;
-            const batchId = event.currentTarget.dataset.id;
-            const filesRow = document.getElementById(`files-for-batch-${batchId}`);
-            const isVisible = filesRow.style.display === 'table-row';
-            if (isVisible) {
-                filesRow.style.display = 'none';
-                clearInterval(activeTimers[batchId]);
-            } else {
-                filesRow.style.display = 'table-row';
-                await loadAndRenderBatchFiles(batchId);
-            }
-        }
-        
-        async function loadAndRenderBatchFiles(batchId) {
-            const container = document.getElementById(`files-table-${batchId}`);
-            try {
-                const response = await fetch(`${API_BASE_URL}/api/batch/${batchId}/details`);
-                const files = await response.json();
-                renderFilesTable(batchId, files);
-                const isProcessing = files.some(f => !f.status.toLowerCase().includes('concluído') && !f.status.toLowerCase().includes('erro'));
-                if (isProcessing) {
-                    if (activeTimers[batchId]) clearInterval(activeTimers[batchId]);
-                    activeTimers[batchId] = setInterval(() => loadAndRenderBatchFiles(batchId), 5000);
-                } else {
-                    clearInterval(activeTimers[batchId]);
-                }
-            } catch (error) {
-                container.innerHTML = `<p class="text-red-500">Erro ao carregar ficheiros.</p>`;
-            }
-        }
-
-        function renderFilesTable(batchId, files) {
-            const container = document.getElementById(`files-table-${batchId}`);
-            if (!files || files.length === 0) {
-                container.innerHTML = `<p class="text-gray-500">Nenhum ficheiro neste lote.</p>`;
-                return;
-            }
-            let tableHTML = `<table class="min-w-full">`;
-            files.forEach(file => {
-                let statusColor = 'text-gray-500 dark:text-gray-400';
-                if (file.status === 'Concluído') statusColor = 'text-green-500 dark:text-green-400';
-                else if (file.status.toLowerCase().includes('erro')) statusColor = 'text-red-500 dark:text-red-400';
-                else if (!file.status.toLowerCase().includes('concluído')) statusColor = 'text-blue-500 dark:text-blue-400';
+                    thread = threading.Thread(target=process_file_pipeline, args=(entry_id, file_path, filename, file_type, model_id))
+                    thread.start()
                 
-                let actions = '';
-                if (file.status === 'Concluído') {
-                    actions = `
-                        <a href="${API_BASE_URL}/api/download/transcription/${file.id}" class="text-indigo-500 hover:text-indigo-400 mr-4">Baixar TXT</a>
-                        <button class="view-transcription-btn text-green-500 hover:text-green-400" data-id="${file.id}">Ver Detalhes</button>
-                    `;
-                } else if (file.status.toLowerCase().includes('erro')) {
-                    actions = `<button class="view-transcription-btn text-red-500 hover:text-red-400" data-id="${file.id}">Ver Erro</button>`;
-                }
-
-                tableHTML += `<tr class="border-t border-gray-200 dark:border-gray-700"><td class="p-2">${file.filename}</td><td class="p-2 font-medium ${statusColor}">${file.status}</td><td class="p-2 text-right">${actions}</td></tr>`;
-            });
-            tableHTML += `</table>`;
-            container.innerHTML = tableHTML;
-            document.querySelectorAll('.view-transcription-btn').forEach(btn => btn.addEventListener('click', showFileDetailModal));
-        }
-
-        // --- Lógica do Modal ---
-        const modal = document.getElementById('transcription-modal');
-        const modalTitle = document.getElementById('modal-title');
-        const modalContent = document.getElementById('modal-content');
-        const modalCloseBtn = document.getElementById('modal-close-btn');
-        const modalInteractiveForm = document.getElementById('modal-interactive-form');
-        const modalInteractiveResultContainer = document.getElementById('modal-interactive-result-container');
-        const modalInteractiveResult = document.getElementById('modal-interactive-result');
-        const modalInteractivePrompt = document.getElementById('modal-interactive-prompt');
-        const modalAnalysisSection = document.getElementById('modal-interactive-analysis');
-
-        async function openAnalysisModal(transcriptionId) {
-            if (!modal) return;
-            
-            modalTitle.textContent = "Análise Individual";
-            modalContent.innerHTML = '<p>A carregar conteúdo...</p>';
-            modalInteractiveResultContainer.classList.add('hidden');
-            modalInteractivePrompt.value = '';
-            modalInteractiveForm.dataset.id = transcriptionId;
-            modalAnalysisSection.style.display = 'block';
-
-            modal.classList.remove('hidden');
-
-            try {
-                const response = await fetch(`${API_BASE_URL}/api/transcription/${transcriptionId}`);
-                const data = await response.json();
-                const formattedText = data.transcript_text
-                    ? data.transcript_text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>')
-                    : '<p>Conteúdo não disponível.</p>';
-                modalContent.innerHTML = formattedText;
-            } catch (error) {
-                modalContent.innerHTML = '<p class="text-red-500">Erro ao carregar o conteúdo.</p>';
-            }
-        }
-
-        async function showFileDetailModal(event) {
-            const transcriptionId = event.target.dataset.id;
-            const isError = event.target.textContent.toLowerCase().includes('erro');
-            
-            await openAnalysisModal(transcriptionId);
-            
-            if (isError) {
-                modalTitle.textContent = "Detalhe do Erro";
-                modalAnalysisSection.style.display = 'none';
-            }
-        }
-
-        function hideModal() {
-            if (modal) modal.classList.add('hidden');
-        }
+                transaction.commit()
+    except Exception as e:
+        print(f"Erro no upload: {e}")
+        return jsonify({"error": f"Erro interno do servidor: {e}"}), 500
         
-        if (modalCloseBtn) modalCloseBtn.addEventListener('click', hideModal);
-        if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
-        
-        if (modalInteractiveForm) {
-            modalInteractiveForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const transcriptionId = e.currentTarget.dataset.id;
-                const prompt = modalInteractivePrompt.value;
-                const button = e.currentTarget.querySelector('button');
+    message = f"Lote '{batch_name}' recebido. {len(files_to_process)} ficheiros enviados para o pipeline com o modelo '{model_id}'."
+    return jsonify({"message": message, "batch_id": batch_id}), 202
 
-                if (!prompt.trim() || !transcriptionId) return;
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-                button.disabled = true;
-                button.textContent = 'A analisar...';
-                modalInteractiveResultContainer.classList.remove('hidden');
-                modalInteractiveResult.textContent = 'A IA está a pensar...';
+@app.route('/api/dashboard_data', methods=['GET'])
+def get_dashboard_data():
+    batch_id_filter = request.args.get('batch_id')
+    params = {}
+    where_clause = "WHERE t.status = 'Concluído'"
+    if batch_id_filter and batch_id_filter != 'all':
+        where_clause += " AND b.id = :batch_id"
+        params['batch_id'] = batch_id_filter
+    query = f"""
+    SELECT t.id, b.name as batch_name, a.sentiment, a.topic, a.summary
+    FROM transcriptions t 
+    JOIN analyses a ON t.id = a.transcription_id 
+    JOIN batches b ON t.batch_id = b.id 
+    {where_clause} 
+    ORDER BY t.upload_date DESC
+    """
+    with engine.connect() as connection:
+        result = connection.execute(text(query), params)
+        data = [dict(row) for row in result.mappings()]
+    return jsonify(data)
 
-                try {
-                    const response = await fetch(`${API_BASE_URL}/api/analysis/${transcriptionId}/insight`, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ prompt: prompt })
-                    });
-                    const result = await response.json();
-                    if (response.ok) {
-                        modalInteractiveResult.textContent = result.answer;
-                    } else {
-                        throw new Error(result.error || "Erro desconhecido");
-                    }
-                } catch (error) {
-                    modalInteractiveResult.textContent = `Erro: ${error.message}`;
-                } finally {
-                    button.disabled = false;
-                    button.textContent = 'Analisar';
-                }
-            });
-        }
+@app.route('/api/batches', methods=['GET'])
+def get_batches():
+    query = "SELECT b.id, b.name, b.created_at, COUNT(t.id) as file_count FROM batches b LEFT JOIN transcriptions t ON b.id = t.batch_id GROUP BY b.id, b.name, b.created_at ORDER BY b.created_at DESC;"
+    with engine.connect() as connection:
+        result = connection.execute(text(query))
+        batches = [dict(row) for row in result.mappings()]
+    return jsonify(batches)
 
-        // --- Carga Inicial ---
-        initializeTheme();
-        fetchAndRenderDashboard();
-    });
-    </script>
-</body>
-</html>
+@app.route('/api/batch/<int:batch_id>/details', methods=['GET'])
+def get_batch_details(batch_id):
+    query = "SELECT id, filename, status FROM transcriptions WHERE batch_id = :batch_id ORDER BY id"
+    with engine.connect() as connection:
+        result = connection.execute(text(query), {"batch_id": batch_id})
+        files = []
+        for row in result.mappings():
+            file_data = dict(row)
+            status_str = file_data.get('status', '')
+            progress = None
+            if '(API):' in status_str and '%' in status_str:
+                try:
+                    progress_str = status_str.split('(API):')[1].strip().replace('%', '')
+                    progress = int(progress_str)
+                except (ValueError, IndexError):
+                    progress = 0
+            elif status_str == 'Concluído':
+                progress = 100
+            
+            file_data['progress'] = progress
+            files.append(file_data)
+    return jsonify(files)
+
+@app.route('/api/transcription/<int:transcription_id>', methods=['GET'])
+def get_transcription_text(transcription_id):
+    query = "SELECT t.transcript_text, a.full_analysis_json FROM transcriptions t LEFT JOIN analyses a ON t.id = a.transcription_id WHERE t.id = :id"
+    with engine.connect() as connection:
+        result = connection.execute(text(query), {"id": transcription_id}).mappings().fetchone()
+    
+    if not result:
+        return jsonify({"error": "Análise não encontrada."}), 404
+
+    response_data = {
+        "transcript_text": result.get("transcript_text", "Conteúdo não disponível."),
+        "analysis": json.loads(result["full_analysis_json"]) if result.get("full_analysis_json") else None
+    }
+    return jsonify(response_data)
+
+if __name__ == '__main__':
+    app.run(host='127.0.0.1', port=5000, debug=True)
