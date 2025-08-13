@@ -1,4 +1,4 @@
-````markdown
+
 <div align="center">
   <h1 align="center">Plataforma de Análise de Áudio com IA</h1>
   <p align="center">
