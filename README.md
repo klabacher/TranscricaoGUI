@@ -1,151 +1,140 @@
+### 📁 `README.md` (Versão Final Completa)
+
+````markdown
 <div align="center">
-<img src="https://placehold.co/800x200/0D1117/FFFFFF?text=Plataforma+de+Análise+de+Áudio+com+IA" alt="Banner do Projeto">
+  <h1 align="center">Plataforma de Análise de Áudio com IA</h1>
+  <p align="center">
+    Uma aplicação web moderna em Python e Flask, refatorada para máxima organização, escalabilidade e melhores práticas de desenvolvimento.
+  </p>
 </div>
 
-<h1 align="center">Plataforma de Análise de Áudio com IA (Cloud-Native)</h1>
-
 <div align="center">
-<a href="https://www.python.org" target="_blank"><img src="https://img.shields.io/badge/Python-3.11-blue.svg" alt="Python Version"></a>
-<a href="https://flask.palletsprojects.com/" target="_blank"><img src="https://img.shields.io/badge/Flask-2.3-black.svg" alt="Flask Version"></a>
-<a href="https://cloud.google.com/appengine" target="_blank"><img src="https://img.shields.io/badge/Google_App_Engine-Deploy-blueviolet.svg" alt="Google App Engine"></a>
-<a href="https://cloud.google.com" target="_blank"><img src="https://img.shields.io/badge/Google_Cloud-Native-orange.svg" alt="Google Cloud Native"></a>
-<a href="./LICENSE" target="_blank"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"></a>
+  <img src="https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python" alt="Python Version">
+  <img src="https://img.shields.io/badge/Flask-2.3-000000?style=for-the-badge&logo=flask" alt="Flask Version">
+  <img src="https://img.shields.io/badge/SQLAlchemy-2.0-d71f00?style=for-the-badge&logo=sqlalchemy" alt="SQLAlchemy Version">
+  <img src="https://img.shields.io/badge/Frontend-TailwindCSS-38B2AC?style=for-the-badge&logo=tailwind-css" alt="Tailwind CSS">
 </div>
 
-<p align="center">
-Uma plataforma web 100% nativa na nuvem que utiliza os serviços da Google Cloud para transcrever e analisar ficheiros de áudio de forma escalável, robusta e assíncrona.
-</p>
+## ✨ Visão Geral do Projeto
 
-✨ Funcionalidades Principais
-☁️ Arquitetura Cloud-Native: O projeto foi refatorado para rodar inteiramente na Google Cloud, usando App Engine, Cloud SQL, Cloud Storage e Cloud Tasks.
+Esta plataforma é uma ferramenta poderosa para transcrever e analisar arquivos de áudio ou texto. Construída sobre uma arquitetura de microsserviços desacoplada, ela permite o processamento assíncrono de arquivos, análise de sentimento, identificação de tópicos e resumo de conteúdo através de modelos de Inteligência Artificial de ponta, como o **Google Gemini** e o **Chirp**.
 
-📊 Dashboard Interativo: Visualize métricas agregadas, distribuição de sentimentos e principais tópicos em gráficos dinâmicos.
+O projeto foi completamente refatorado de uma base de código monolítica para uma estrutura moderna, organizada e escalável, seguindo as melhores práticas da indústria.
 
-🗂️ Processamento Assíncrono e Confiável: Uploads de ficheiros são enviados para o Cloud Storage e uma tarefa é criada no Cloud Tasks, garantindo que o processamento ocorra em background sem sobrecarregar a aplicação.
+### Funcionalidades Principais
 
-🤖 Análise com IA da Google:
+* **Upload em Lotes**: Envie múltiplos arquivos de áudio (`.wav`, `.mp3`, etc.) ou texto (`.txt`) de uma só vez.
+* **Seleção de Provedor**: Escolha dinamicamente qual motor de IA usar para a transcrição (ex: Google Chirp ou uma API externa).
+* **Processamento Assíncrono**: As tarefas de transcrição e análise rodam em background (usando `threading`), permitindo que o usuário continue navegando sem travamentos.
+* **Análise com Gemini**: Utiliza o poder do Google Gemini para extrair insights valiosos de cada transcrição, incluindo:
+    * Análise de Sentimento (Positivo, Negativo, Neutro)
+    * Identificação do Tópico Principal
+    * Resumo Executivo
+* **Dashboard Interativo**: Visualize os resultados em um dashboard dinâmico com gráficos de sentimento, tópicos e um histórico detalhado de todas as análises.
 
-Transcrição: Utiliza o modelo Google Chirp para transcrições de alta qualidade com diarização de locutor.
+## 🛠️ Stack Tecnológica
 
-Análise de Conteúdo: Emprega o Google Gemini para extrair resumos, sentimentos e tópicos de cada transcrição.
+| Categoria        | Tecnologia                               | Propósito                                       |
+| :--------------- | :--------------------------------------- | :---------------------------------------------- |
+| **Backend** | Python 3.11, Flask, Gunicorn             | Lógica da aplicação e servidor web              |
+| **Banco de Dados** | SQLAlchemy ORM, Flask-SQLAlchemy         | Interação com o banco de dados (SQLite/Postgres) |
+| **Frontend** | HTML5, Tailwind CSS, JavaScript, Chart.js| Interface do usuário e visualização de dados   |
+| **DevOps** | Docker (opcional), Variáveis de Ambiente (`.env`) | Containerização e gerenciamento de configuração |
+| **IA & APIs** | Google Vertex AI (Gemini, Chirp), Requests | Serviços de IA e comunicação com APIs externas  |
 
-🗄️ Histórico e Detalhes: Navegue pelo histórico de lotes processados, veja o status de cada ficheiro e analise os resultados individuais.
+## 🚀 Como Executar o Projeto
 
-🛠️ Stack Tecnológica
-Backend: Flask (Python)
+Siga os passos abaixo para ter a aplicação rodando na sua máquina local.
 
-Frontend: HTML5, Tailwind CSS, JavaScript (com Chart.js)
+### 1. Pré-requisitos
 
-Banco de Dados: Google Cloud SQL (PostgreSQL)
+* Python 3.10 ou superior.
+* Conta no Google Cloud com a API Vertex AI ativada.
+* Uma chave de acesso de Service Account em formato JSON (se for rodar localmente).
 
-Armazenamento: Google Cloud Storage
+### 2. Configuração do Ambiente
 
-Fila de Tarefas: Google Cloud Tasks
+**a. Clone o repositório:**
+```bash
+git clone <URL_DO_SEU_REPOSITORIO>
+cd plataforma_analise_ia
+````
 
-Computação: Google App Engine
+**b. Crie e configure o arquivo de ambiente:**
+Copie o arquivo de exemplo. Este passo é crucial para armazenar suas chaves de API de forma segura.
 
-Modelos de IA: Google Gemini & Google Chirp (via Vertex AI)
+```bash
+cp .env.example .env
+```
 
-🚀 Guia de Configuração e Deploy na Google Cloud
-Este guia detalha todos os passos necessários para configurar o ambiente na Google Cloud e fazer o deploy da aplicação.
+Agora, abra o arquivo `.env` com seu editor de texto e preencha as variáveis com suas credenciais. Para autenticação com o Google Cloud, a forma mais fácil é adicionar a seguinte linha:
 
-Passo 1: Pré-requisitos
-Uma conta Google Cloud com um Cartão de Crédito associado.
+```
+# no seu arquivo .env
+GOOGLE_APPLICATION_CREDENTIALS="caminho/para/sua/chave-de-servico.json"
+```
 
-Google Cloud CLI (gcloud) instalado na sua máquina.
+**Importante:** Adicione o nome da sua chave `.json` e o arquivo `.env` ao seu `.gitignore` para nunca enviá-los a um repositório público\!
 
-Passo 2: Configuração Inicial do Projeto na Google Cloud
-Crie um novo projeto no Console do Google Cloud. Anote o ID do Projeto (ex: meu-projeto-ia-12345).
+**c. Crie e ative um ambiente virtual:**
+É uma boa prática isolar as dependências do seu projeto.
 
-Ative o Faturamento para o projeto. A maioria dos serviços necessários exige que o faturamento esteja ativo.
+```bash
+# Criar o ambiente
+python -m venv venv
 
-No console, vá para Faturamento > Vincular uma conta de faturamento.
+# Ativar no Linux/macOS
+source venv/bin/activate
 
-Ative as APIs necessárias. Para cada API abaixo, vá até a sua página no console e clique em "Ativar":
+# Ativar no Windows (PowerShell)
+.\venv\Scripts\Activate.ps1
+```
 
-App Engine Admin API
+**d. Instale as dependências:**
 
-Cloud SQL Admin API
+```bash
+pip install -r requirements.txt
+```
 
-Cloud Storage API
+### 3\. Inicialize o Banco de Dados
 
-Cloud Tasks API
+Com o ambiente virtual ativado, use o comando customizado do Flask que criamos para gerar o banco de dados:
 
-Vertex AI API
+```bash
+flask init-db
+```
 
-Cloud Build API (geralmente ativada pelo deploy do App Engine)
+Este comando irá ler seus `models.py` e criar um arquivo `database.db` (SQLite) na raiz do projeto.
 
-Passo 3: Criação dos Recursos na Nuvem
-Cloud Storage (Bucket)
+### 4\. Rode a Aplicação
 
-Vá para Cloud Storage > Buckets e clique em Criar.
+Finalmente, inicie o servidor de desenvolvimento do Flask:
 
-Dê um nome único global para o seu bucket (ex: bucket-transcricoes-meuprojeto).
+```bash
+flask run
+```
 
-Escolha a mesma região que usará para os outros serviços (ex: southamerica-east1).
+Ou simplesmente:
 
-Mantenha as outras configurações como padrão e crie o bucket.
+```bash
+python run.py
+```
 
-Cloud SQL (PostgreSQL)
+Acesse a aplicação no seu navegador em **http://127.0.0.1:5000**.
 
-Vá para SQL e clique em Criar Instância.
+## 🏛️ Arquitetura do Software
 
-Escolha PostgreSQL.
+A codebase foi reestruturada para seguir padrões de design que promovem a separação de responsabilidades (SoC).
 
-Dê um ID de Instância (ex: db-transcricoes).
+  * **`run.py`**: Ponto de entrada da aplicação.
+  * **`config.py`**: Centraliza todas as configurações, lendo do arquivo `.env`.
+  * **`/app`**: O coração da aplicação Flask.
+      * **`__init__.py`**: Utiliza o padrão **Application Factory** (`create_app`) para inicializar o app, extensões e blueprints.
+      * **`models.py`**: Define a estrutura do banco de dados usando classes do **SQLAlchemy ORM**, eliminando a necessidade de SQL bruto.
+      * **`routes.py`**: Contém todas as rotas da API (endpoints), atuando como a camada de controle (Controller). As rotas são organizadas com **Flask Blueprints**.
+      * **`services.py`**: Contém toda a lógica de negócio (o "cérebro"). As rotas chamam funções daqui para fazer o trabalho pesado, como processar arquivos, chamar APIs de IA e interagir com o banco de dados.
+      * **`/templates`** e **`/static`**: Contêm os arquivos de frontend (HTML, CSS, JS), mantendo a interface do usuário completamente separada do backend.
 
-Defina uma senha forte para o utilizador postgres. Guarde esta senha!
+Este design torna o código mais limpo, mais fácil de testar, manter e escalar.
 
-Escolha a mesma região dos outros serviços.
-
-Após a criação, clique na instância e copie o Nome da conexão da instância. Ele terá o formato ID_DO_PROJETO:REGIAO:ID_DA_INSTANCIA.
-
-Cloud Tasks (Fila)
-
-Vá para Cloud Tasks e clique em Criar Fila.
-
-Dê o nome (ID da Fila) transcription-queue.
-
-Escolha a mesma região dos outros serviços.
-
-Passo 4: Configuração do Código Local
-Clone o repositório do GitHub:
-
-git clone https://github.com/SEU_USUARIO/SEU_REPOSITORIO.git
-cd SEU_REPOSITORIO
-
-Configure o app.yaml:
-Abra o ficheiro app.yaml e substitua os valores na secção env_variables pelos recursos que você acabou de criar.
-
-runtime: python311
-entrypoint: gunicorn -b :$PORT --workers 1 --threads 8 --timeout 0 app:app
-
-instance_class: F4_1G
-automatic_scaling:
-  min_instances: 0
-  max_instances: 2
-
-env_variables:
-  # SUBSTITUA PELOS SEUS VALORES REAIS
-  GCS_BUCKET_NAME: "nome-do-seu-bucket-unico"
-  DB_USER: "postgres"
-  DB_PASS: "SUA_SENHA_FORTE_DO_BANCO_DE_DADOS"
-  DB_NAME: "postgres"
-  INSTANCE_CONNECTION_NAME: "SEU_PROJETO:sua-regiao:sua-instancia-sql"
-
-Passo 5: Deploy da Aplicação
-Autentique-se com a gcloud CLI:
-Abra um terminal na pasta do projeto e execute os comandos para fazer login com a sua conta Google e definir o projeto correto.
-
-gcloud auth login
-gcloud config set project SEU_ID_DE_PROJETO
-
-Faça o deploy:
-Este comando irá enviar o seu código para o App Engine, que irá construir a imagem e iniciar a sua aplicação.
-
-gcloud app deploy
-
-Acesse a sua aplicação:
-Após o deploy ser concluído, o terminal mostrará o URL da sua aplicação. Ele será algo como https://SEU_ID_DE_PROJETO.uc.r.appspot.com.
-
-Parabéns! A sua plataforma está agora a funcionar 100% na nuvem.
+```
